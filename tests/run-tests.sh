@@ -41,6 +41,14 @@ set_accounts() {
   printf '%s\n' "$@" > "$FAKE_GH_DIR/accounts"
 }
 
+# --- read_lines (mapfile stand-in for bash 3.2) -----------------------------
+
+read_lines lines < <(printf '%s\n' one "two words" three)
+check "read_lines keeps one element per line" "3|two words" "${#lines[@]}|${lines[1]}"
+
+read_lines lines < <(true)
+check "read_lines gives an empty array for empty input" "0" "${#lines[@]}"
+
 # --- list_gh_accounts ------------------------------------------------------
 
 set_accounts personal-account work-account
