@@ -1,0 +1,63 @@
+# Runs on every pull request (and on main after a merge) so changes that
+# would break a shell or PowerShell script are caught before they ship.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: Shell scripts (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell scripts use LF line endings
+        run: |
+          bad=$(git ls-files '*.sh' | xargs grep -l $'\r' || true)
+          if [ -n "$bad" ]; then
+            echo "These shell scripts have Windows (CRLF) line endings:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: Syntax check (bash -n)
+        run: |
+          for f in $(git ls-files '*.sh'); do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning $(git ls-files '*.sh')
+
+      - name: Tests
+        run: bash tests/run-tests.sh
+
+  powershell:
+    name: PowerShell scripts (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse every .ps1
+        shell: powershell
+        run: |
+          $failed = $false
+          foreach ($f in (git ls-files '*.ps1')) {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errors)
+            if ($errors) {
+              $failed = $true
+              Write-Host "::error file=$f::$($errors[0].Message)"
+              $errors | ForEach-Object { Write-Host "  $f line $($_.Extent.StartLineNumber): $($_.Message)" }
+            }
+            else { Write-Host "OK  $f" }
+          }
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          if ($failed) { exit 1 }

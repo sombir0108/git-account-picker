@@ -1,3 +1,4 @@
 # Shell scripts must keep Unix line endings even on Windows checkouts,
 # otherwise bash fails with ": command not found".
 *.sh text eol=lf
+tests/stubs/* text eol=lf
