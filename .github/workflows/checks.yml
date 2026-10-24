@@ -15,7 +15,7 @@ jobs:
     name: Shell scripts (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Shell scripts use LF line endings
         run: |
@@ -39,11 +39,30 @@ jobs:
       - name: Tests
         run: bash tests/run-tests.sh
 
+  macos:
+    name: Shell scripts (macOS built-in bash 3.2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # macOS ships bash 3.2 at /bin/bash, and that is the `bash` git runs
+      # the credential helper with unless the user installed a newer one.
+      - name: Syntax check (bash -n)
+        run: |
+          /bin/bash --version | head -n 1
+          for f in $(git ls-files '*.sh'); do
+            echo "bash -n $f"
+            /bin/bash -n "$f"
+          done
+
+      - name: Tests
+        run: /bin/bash tests/run-tests.sh
+
   powershell:
     name: PowerShell scripts (Windows PowerShell 5.1)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Parse every .ps1
         shell: powershell

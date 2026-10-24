@@ -20,6 +20,16 @@ has_tty() {
   [ -t 1 ] && { exec 3<>/dev/tty; } 2>/dev/null
 }
 
+# Reads stdin into the array named $1, one element per line. Stands in for
+# `mapfile -t`, which macOS's built-in bash 3.2 doesn't have.
+read_lines() {
+  local _line
+  eval "$1=()"
+  while IFS= read -r _line; do
+    eval "$1+=(\"\$_line\")"
+  done
+}
+
 list_gh_accounts() {
   local host="$1"
   gh auth status --hostname "$host" 2>&1 | sed -n 's/.*Logged in to [^ ]* account \([^ ]*\).*/\1/p'
@@ -230,15 +240,16 @@ open_browser_login() {
 ensure_gh_login() {
   local host="$1"
   local accounts
-  mapfile -t accounts < <(list_gh_accounts "$host")
+  read_lines accounts < <(list_gh_accounts "$host")
 
   if [ "${#accounts[@]}" -eq 0 ]; then
     echo "No GitHub account configured for $host — opening browser to sign in..." >&2
     open_browser_login "$host"
-    mapfile -t accounts < <(list_gh_accounts "$host")
+    read_lines accounts < <(list_gh_accounts "$host")
   fi
 
-  printf '%s\n' "${accounts[@]}"
+  # Guarded: bash 3.2 treats "${accounts[@]}" of an empty array as unset.
+  [ "${#accounts[@]}" -eq 0 ] || printf '%s\n' "${accounts[@]}"
 }
 
 # --- Expired / revoked / SSO-blocked token detection -----------------------
@@ -288,7 +299,7 @@ handle_invalid_credential() {
   echo "GitHub credential for $host looks expired, revoked, or blocked (e.g. org SSO re-authorization) — asking you to re-authenticate..." >&2
 
   local accounts
-  mapfile -t accounts < <(ensure_gh_login "$host")
+  read_lines accounts < <(ensure_gh_login "$host")
   [ "${#accounts[@]}" -gt 0 ] || return
 
   local chosen
@@ -340,7 +351,7 @@ pick_account() {
         # list, and ask again so the new account can be picked right away.
         while [ "$picked" = "__ADD__" ]; do
           open_browser_login "$host" >&2
-          mapfile -t accounts < <(list_gh_accounts "$host")
+          read_lines accounts < <(list_gh_accounts "$host")
           picked="$(prompt_gui_windows "$host" "${accounts[@]}")"
         done
         printf '%s' "$picked"

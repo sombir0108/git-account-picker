@@ -15,7 +15,8 @@ if ! ensure_gh_installed; then
   exit 1
 fi
 
-mapfile -t accounts < <(ensure_gh_login "$host")
+accounts=()
+read_lines accounts < <(ensure_gh_login "$host")
 
 if [ "${#accounts[@]}" -eq 0 ]; then
   echo "Still no GitHub account configured for $host. Finish signing in and try again." >&2
