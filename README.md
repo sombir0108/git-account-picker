@@ -150,9 +150,10 @@ turns out to be dead.
 - Depends on `gh auth switch`, so it only works with accounts you've
   logged into via `gh auth login`.
 - The GUI fallback needs `powershell.exe` (Windows), `osascript` (macOS,
-  built in), or `zenity`/`kdialog` (Linux). If none is available, it
-  silently falls back to your first logged-in account rather than
-  blocking the git operation.
+  built in), or `zenity`/`kdialog` (Linux). If none is available (and
+  there's no terminal), it keeps the active account and prints a message
+  saying so, rather than blocking the git operation or guessing an
+  account. Cancelling the picker also keeps the active account.
 - The expired-token check adds one `gh api user` call per host at most
   once every `GIT_ACCOUNT_PICKER_VALIDATE_TTL` seconds (default 60) — a token that
   dies mid-window can still fail once silently before the next check

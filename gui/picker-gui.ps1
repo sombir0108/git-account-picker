@@ -3,8 +3,9 @@ param(
   [Parameter(Mandatory = $true)][string]$Accounts
 )
 
-# Prints the chosen account name, or "__ADD__" when the user clicked
-# "Add account..." (the caller then runs the browser sign-in and re-asks).
+# Prints the chosen account name, "__ADD__" when the user clicked
+# "Add account..." (the caller then runs the browser sign-in and re-asks),
+# or nothing when the popup was cancelled.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -69,6 +70,4 @@ if ($result -eq [System.Windows.Forms.DialogResult]::Retry) {
 elseif ($result -eq [System.Windows.Forms.DialogResult]::OK -and $listBox.SelectedItem) {
   Write-Output $listBox.SelectedItem
 }
-else {
-  Write-Output $accountList[0]
-}
+# Cancelled or closed: print nothing so the caller keeps the active account.

@@ -56,19 +56,18 @@ prompt_cli() {
     local i=1
     for a in "${accounts[@]}"; do echo "  $i) $a"; i=$((i + 1)); done
     echo "  a) $PICKER_ADD_LABEL"
-    printf "Account [1-%d, or a]: " "${#accounts[@]}"
+    printf "Account [1-%d, a to add, Enter to cancel]: " "${#accounts[@]}"
   } >&3
   local choice
-  read -r choice <&3 || choice=1
+  read -r choice <&3 || choice=""
   exec 3>&- 2>/dev/null || true
   case "$choice" in
     a|A) printf '__ADD__'; return ;;
   esac
+  # Anything other than a listed number (including just Enter) cancels.
   local idx=$((choice - 1))
   if [ "$idx" -ge 0 ] 2>/dev/null && [ "$idx" -lt "${#accounts[@]}" ] 2>/dev/null; then
     printf '%s' "${accounts[$idx]}"
-  else
-    printf '%s' "${accounts[0]}"
   fi
 }
 
@@ -90,12 +89,13 @@ prompt_gui_macos() {
     if [ -z "$list" ]; then list="\"$a\""; else list="$list, \"$a\""; fi
   done
   local result
-  result="$(osascript -e "choose from list {$list} with prompt \"Choose GitHub account for $host:\" with title \"GitHub Account Picker\"" 2>/dev/null || echo false)"
-  if [ "$result" = "false" ] || [ -z "$result" ]; then
-    printf '%s' "${accounts[0]}"
-  elif [ "$result" = "$PICKER_ADD_LABEL" ]; then
+  # Cancel makes `choose from list` print "false"; osascript itself failing
+  # (e.g. no GUI session over SSH) means no popup could be shown.
+  result="$(osascript -e "choose from list {$list} with prompt \"Choose GitHub account for $host:\" with title \"GitHub Account Picker\"" 2>/dev/null)" \
+    || { printf '__NONE__'; return; }
+  if [ "$result" = "$PICKER_ADD_LABEL" ]; then
     printf '__ADD__'
-  else
+  elif [ "$result" != "false" ]; then
     printf '%s' "$result"
   fi
 }
@@ -104,7 +104,10 @@ prompt_gui_linux() {
   local host="$1"; shift
   local accounts=("$@")
   local sel=""
-  if command -v zenity >/dev/null 2>&1; then
+  if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    printf '__NONE__'
+    return
+  elif command -v zenity >/dev/null 2>&1; then
     sel="$(zenity --list --title="GitHub Account Picker" \
       --text="Choose GitHub account for $host:" \
       --column="Account" "${accounts[@]}" "$PICKER_ADD_LABEL" \
@@ -116,13 +119,14 @@ prompt_gui_linux() {
     for a in "${accounts[@]}"; do args+=("$a" "$a"); done
     args+=("__ADD__" "$PICKER_ADD_LABEL")
     sel="$(kdialog --title "GitHub Account Picker" --menu "Choose GitHub account for $host:" "${args[@]}" 2>/dev/null || true)"
+  else
+    printf '__NONE__'
+    return
   fi
   if [ "$sel" = "$PICKER_ADD_LABEL" ] || [ "$sel" = "__ADD__" ]; then
     printf '__ADD__'
-  elif [ -n "$sel" ]; then
-    printf '%s' "$sel"
   else
-    printf '%s' "${accounts[0]}"
+    printf '%s' "$sel"
   fi
 }
 
@@ -329,7 +333,9 @@ handle_invalid_credential() {
 
   local chosen
   chosen="$(pick_account "$host" "${accounts[@]}")"
-  [ -n "$chosen" ] && gh auth switch --hostname "$host" --user "$chosen" >/dev/null 2>&1 || true
+  # Nothing chosen (cancelled, or no way to ask): leave things as they are.
+  [ -n "$chosen" ] || return 0
+  gh auth switch --hostname "$host" --user "$chosen" >/dev/null 2>&1 || true
 
   if ! active_credential_is_valid "$host"; then
     echo "That account's credential is invalid too — opening browser to sign in again..." >&2
@@ -353,8 +359,17 @@ ensure_valid_credential() {
   mark_validated "$host"
 }
 
+# Prints the account gh currently uses for $host (empty if none).
+active_account() {
+  local host="$1"
+  gh auth status --hostname "$host" 2>&1 | awk '
+    / account / { for (i = 1; i < NF; i++) if ($i == "account") name = $(i + 1) }
+    /Active account: true/ { print name; exit }'
+}
+
 # Shows the terminal menu or the popup once. Prints the chosen account name,
-# or "__ADD__" when "Add account..." was chosen.
+# "__ADD__" when "Add account..." was chosen, nothing when cancelled, or
+# "__NONE__" when neither a terminal nor a popup is available.
 prompt_once() {
   local host="$1"; shift
 
@@ -368,7 +383,7 @@ prompt_once() {
       if command -v powershell.exe >/dev/null 2>&1; then
         prompt_gui_windows "$host" "$@"
       else
-        printf '%s' "$1"
+        printf '__NONE__'
       fi
       ;;
     macos) prompt_gui_macos "$host" "$@" ;;
@@ -376,9 +391,10 @@ prompt_once() {
   esac
 }
 
-# Prints the account to use for $host. With one account it is used without
-# asking, unless PICKER_ALWAYS_ASK=1 (the desktop shortcut sets it so "Add
-# account..." stays reachable).
+# Prints the account to use for $host, or nothing when the user cancelled
+# or could not be asked; callers then keep the active account. With one
+# account it is used without asking, unless PICKER_ALWAYS_ASK=1 (the
+# desktop shortcut sets it so "Add account..." stays reachable).
 pick_account() {
   local host="$1"; shift
   local accounts=("$@")
@@ -397,5 +413,19 @@ pick_account() {
     read_lines accounts < <(list_gh_accounts "$host")
     picked="$(prompt_once "$host" "${accounts[@]}")"
   done
+
+  # Never fall back to an arbitrary account silently: say what happened and
+  # leave the active account alone.
+  local active
+  if [ "$picked" = "__NONE__" ]; then
+    active="$(active_account "$host")"
+    local hint=""
+    [ "$(os_kind)" = "linux" ] && hint="install zenity or kdialog for a popup, or "
+    echo "git-account-picker: can't show the account picker here (no terminal or popup available). Keeping the active $host account '${active:-none}'. To switch, ${hint}run git-switch-account.sh in a terminal." >&2
+    picked=""
+  elif [ -z "$picked" ]; then
+    active="$(active_account "$host")"
+    echo "git-account-picker: no account chosen. Keeping the active $host account '${active:-none}'." >&2
+  fi
   printf '%s' "$picked"
 }
