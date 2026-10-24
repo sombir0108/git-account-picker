@@ -26,6 +26,8 @@ fi
 # Always show the list, even with one account, so "Add account..." is
 # reachable from the shortcut.
 chosen="$(PICKER_ALWAYS_ASK=1 pick_account "$host" "${accounts[@]}")"
+# Cancelled (pick_account already said so): nothing to switch.
+[ -n "$chosen" ] || exit 0
 gh auth switch --hostname "$host" --user "$chosen" >/dev/null
 echo "Switched active GitHub account to: $chosen"
 

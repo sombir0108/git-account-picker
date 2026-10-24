@@ -111,6 +111,33 @@ check "PICKER_ALWAYS_ASK shows the list even with one account" \
   "new-account" \
   "$(PICKER_ALWAYS_ASK=1 pick_account github.com only-account 2>/dev/null)"
 
+# --- cancelling, or no way to ask, keeps the active account -----------------
+
+rm -f "$WORK_DIR/browser-opened"
+open_browser_login() { touch "$WORK_DIR/browser-opened"; }
+
+set_accounts personal-account work-account
+check "active_account reads the active account" "personal-account" "$(active_account github.com)"
+
+prompt_once() { :; }
+out="$(pick_account github.com personal-account work-account 2>"$WORK_DIR/err")"
+check "cancelling picks nothing" "" "$out"
+grep -q "Keeping the active github.com account 'personal-account'" "$WORK_DIR/err" && r=yes || r=no
+check "cancelling says which account is kept" "yes" "$r"
+
+prompt_once() { printf '__NONE__'; }
+out="$(pick_account github.com personal-account work-account 2>"$WORK_DIR/err")"
+check "no terminal or popup picks nothing" "" "$out"
+grep -q "can't show the account picker here" "$WORK_DIR/err" && r=yes || r=no
+check "no terminal or popup is reported, not silent" "yes" "$r"
+
+touch "$FAKE_GH_DIR/token-invalid"
+handle_invalid_credential github.com 2>/dev/null
+check "cancelling after an expired token keeps the active account" "personal-account" "$(active_account github.com)"
+[ -e "$WORK_DIR/browser-opened" ] && r=yes || r=no
+check "cancelling after an expired token does not open the browser" "no" "$r"
+rm -f "$FAKE_GH_DIR/token-invalid"
+
 eval "$real_prompt_once"
 eval "$real_open_browser_login"
 
