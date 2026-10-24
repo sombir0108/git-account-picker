@@ -15,6 +15,7 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 export PATH="$TESTS_DIR/stubs:$PATH"
 export FAKE_GH_DIR="$WORK_DIR/gh"
 export GIT_ACCOUNT_PICKER_CACHE_DIR="$WORK_DIR/cache"
+export GIT_ACCOUNT_PICKER_CONFIG_DIR="$WORK_DIR/config"
 mkdir -p "$FAKE_GH_DIR"
 
 # shellcheck source=../lib/picker-common.sh
@@ -153,6 +154,68 @@ check "skips validation right after a successful check" "no" "$r"
 
 GIT_ACCOUNT_PICKER_VALIDATE_TTL=0 needs_validation github.com && r=yes || r=no
 check "validates again once the wait time has passed" "yes" "$r"
+
+# --- remembering which account goes with which owner -------------------------
+
+check "owner from a credential path" "my-company" "$(owner_from_path "My-Company/repo.git")"
+owner_from_path "abc123.git" >/dev/null && r=yes || r=no
+check "no owner from a path without a slash (e.g. a gist)" "no" "$r"
+owner_from_path "../etc/passwd" >/dev/null && r=yes || r=no
+check "no owner from a path with odd characters" "no" "$r"
+check "owner from an https remote" "my-company" "$(owner_from_remote_url "https://github.com/my-company/repo.git")"
+check "owner from an ssh remote" "my-company" "$(owner_from_remote_url "git@github.com:my-company/repo.git")"
+owner_from_remote_url "https://gitlab.com/my-company/repo.git" >/dev/null && r=yes || r=no
+check "no owner from a non-GitHub remote" "no" "$r"
+
+remember_account my-company work-account
+remember_account someone-else personal-account
+remember_account my-company client-account
+check "remembering again replaces the old account" "client-account" "$(remembered_account my-company)"
+forget_account my-company
+check "forgetting removes only that owner" "|personal-account" \
+  "$(remembered_account my-company)|$(remembered_account someone-else)"
+
+# use_remembered_account switches only when needed.
+set_accounts personal-account work-account
+remember_account my-company work-account
+use_remembered_account github.com my-company 2>/dev/null
+check "switches to the remembered account" "work-account" "$(active_account github.com)"
+use_remembered_account github.com unknown-owner 2>/dev/null
+check "leaves the account alone for an owner with nothing remembered" "work-account" "$(active_account github.com)"
+
+remember_account gone-owner deleted-account
+use_remembered_account github.com gone-owner 2>/dev/null
+check "forgets a remembered account that is no longer signed in" "" "$(remembered_account gone-owner)"
+
+set_accounts personal-account work-account
+GIT_ACCOUNT_PICKER_REMEMBER=0 use_remembered_account github.com my-company 2>/dev/null
+check "GIT_ACCOUNT_PICKER_REMEMBER=0 turns it off" "personal-account" "$(active_account github.com)"
+
+# Picking an account after a rejected credential (erase) remembers it.
+prompt_once() { printf 'work-account'; }
+set_accounts personal-account work-account
+forget_account my-company
+handle_invalid_credential github.com my-company 2>/dev/null
+check "the account picked after a rejection is remembered for the owner" "work-account" "$(remembered_account my-company)"
+eval "$real_prompt_once"
+
+# End to end: git asks the helper for a credential for a remembered owner.
+set_accounts personal-account work-account
+out="$(printf 'protocol=https\nhost=github.com\npath=my-company/repo.git\n\n' \
+  | bash "$REPO_DIR/bin/git-credential-account-picker.sh" get 2>/dev/null)"
+check "credential helper answers with the remembered owner's account" "username=work-account" \
+  "$(printf '%s\n' "$out" | grep '^username=')"
+
+# Same, through real git with the useHttpPath setting install.sh adds, to
+# prove git really passes the owner along. Ignores the user's git config.
+set_accounts personal-account work-account
+out="$(printf 'url=https://github.com/my-company/repo.git\n\n' \
+  | GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 git \
+      -c "credential.https://github.com.helper=!bash '$REPO_DIR/bin/git-credential-account-picker.sh'" \
+      -c "credential.https://github.com.useHttpPath=true" \
+      credential fill 2>/dev/null)"
+check "git with useHttpPath gets the remembered owner's account" "username=work-account" \
+  "$(printf '%s\n' "$out" | grep '^username=')"
 
 echo ""
 echo "$passed passed, $failed failed"

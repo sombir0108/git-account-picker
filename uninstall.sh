@@ -12,6 +12,7 @@ INSTALL_DIR="${1:-$HOME/.git-account-picker}"
 for host in github.com gist.github.com; do
   git config --global --unset-all "credential.https://$host.helper" 2>/dev/null || true
 done
+git config --global --unset "credential.https://github.com.useHttpPath" 2>/dev/null || true
 
 case "$(uname -s 2>/dev/null)" in
   MINGW*|MSYS*|CYGWIN*)

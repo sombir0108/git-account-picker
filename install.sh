@@ -37,6 +37,9 @@ for host in github.com gist.github.com; do
   git config --global --add "credential.https://$host.helper" ""
   git config --global --add "credential.https://$host.helper" "!bash '$INSTALL_DIR/bin/git-credential-account-picker.sh'"
 done
+# Send the repo path (owner/repo) to the helper so it can remember which
+# account each owner uses.
+git config --global "credential.https://github.com.useHttpPath" true
 
 shortcut_msg="(no desktop shortcut created)"
 case "$(uname -s 2>/dev/null)" in
