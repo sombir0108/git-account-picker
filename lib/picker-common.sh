@@ -322,8 +322,11 @@ active_credential_is_valid() {
 # just be "pick the same one again" if there's only one), switch to it, and
 # if THAT one is also dead, fall back to a fresh browser sign-in instead of
 # leaving the user with a still-broken credential.
+#
+# When the repo owner is known ($2, from `erase`), the account picked here
+# is remembered for that owner (see use_remembered_account).
 handle_invalid_credential() {
-  local host="$1"
+  local host="$1" owner="${2:-}"
 
   echo "GitHub credential for $host looks expired, revoked, or blocked (e.g. org SSO re-authorization) — asking you to re-authenticate..." >&2
 
@@ -336,6 +339,11 @@ handle_invalid_credential() {
   # Nothing chosen (cancelled, or no way to ask): leave things as they are.
   [ -n "$chosen" ] || return 0
   gh auth switch --hostname "$host" --user "$chosen" >/dev/null 2>&1 || true
+
+  if [ -n "$owner" ] && remember_enabled; then
+    remember_account "$owner" "$chosen"
+    echo "git-account-picker: will use '$chosen' for $owner from now on (undo: git-switch-account.sh --forget $owner)." >&2
+  fi
 
   if ! active_credential_is_valid "$host"; then
     echo "That account's credential is invalid too — opening browser to sign in again..." >&2
@@ -428,4 +436,84 @@ pick_account() {
     echo "git-account-picker: no account chosen. Keeping the active $host account '${active:-none}'." >&2
   fi
   printf '%s' "$picked"
+}
+
+# --- Remembering which account goes with which owner ------------------------
+#
+# After you pick an account for a repo owner (a user or organization, e.g.
+# the "my-company" in github.com/my-company/repo), `get` switches to that
+# account automatically next time, so mixing personal and work repos stops
+# prompting. Needs git to send the repo path to the helper, which install.sh
+# turns on with credential.https://github.com.useHttpPath. Stored as
+# "owner account" lines; GIT_ACCOUNT_PICKER_REMEMBER=0 turns it off.
+
+GIT_ACCOUNT_PICKER_CONFIG_DIR="${GIT_ACCOUNT_PICKER_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/git-account-picker}"
+GIT_ACCOUNT_PICKER_OWNERS_FILE="$GIT_ACCOUNT_PICKER_CONFIG_DIR/owners"
+
+remember_enabled() {
+  [ "${GIT_ACCOUNT_PICKER_REMEMBER:-1}" != "0" ]
+}
+
+# Prints the lowercased owner from a credential path like "Owner/repo.git",
+# or fails when there isn't a valid one.
+owner_from_path() {
+  local owner="${1%%/*}"
+  case "$owner" in
+    ""|*[!A-Za-z0-9-]*) return 1 ;;
+  esac
+  [ "$owner" != "$1" ] || return 1
+  printf '%s' "$owner" | tr '[:upper:]' '[:lower:]'
+}
+
+# Prints the lowercased owner of a github.com remote URL (https or ssh), or
+# fails when the URL isn't one.
+owner_from_remote_url() {
+  local path
+  case "$1" in
+    https://github.com/*) path="${1#https://github.com/}" ;;
+    git@github.com:*) path="${1#git@github.com:}" ;;
+    ssh://git@github.com/*) path="${1#ssh://git@github.com/}" ;;
+    *) return 1 ;;
+  esac
+  owner_from_path "$path"
+}
+
+remembered_account() {
+  local owner="$1"
+  [ -f "$GIT_ACCOUNT_PICKER_OWNERS_FILE" ] || return 0
+  awk -v o="$owner" '$1 == o { print $2; exit }' "$GIT_ACCOUNT_PICKER_OWNERS_FILE"
+}
+
+forget_account() {
+  local owner="$1" file="$GIT_ACCOUNT_PICKER_OWNERS_FILE"
+  [ -f "$file" ] || return 0
+  awk -v o="$owner" '$1 != o' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
+remember_account() {
+  local owner="$1" account="$2"
+  mkdir -p "$GIT_ACCOUNT_PICKER_CONFIG_DIR" 2>/dev/null || return 0
+  forget_account "$owner"
+  echo "$owner $account" >> "$GIT_ACCOUNT_PICKER_OWNERS_FILE"
+}
+
+# Called from `get`. When an account is remembered for this owner and isn't
+# the active one, switch to it. Costs nothing for owners with no remembered
+# account; otherwise one local `gh config get` (no network).
+use_remembered_account() {
+  local host="$1" owner="$2"
+  [ -n "$owner" ] && remember_enabled || return 0
+  local wanted active
+  wanted="$(remembered_account "$owner")"
+  [ -n "$wanted" ] || return 0
+  active="$(gh config get -h "$host" user 2>/dev/null || true)"
+  [ "$wanted" != "$active" ] || return 0
+  if gh auth switch --hostname "$host" --user "$wanted" >/dev/null 2>&1; then
+    echo "git-account-picker: switched to '$wanted' for $owner (remembered)." >&2
+    # Check the newly active account on this request, not up to a minute later.
+    rm -f "$GIT_ACCOUNT_PICKER_CACHE_DIR/last-validated-$host" 2>/dev/null || true
+  else
+    echo "git-account-picker: '$wanted' is remembered for $owner but isn't signed in any more; forgetting it." >&2
+    forget_account "$owner"
+  fi
 }

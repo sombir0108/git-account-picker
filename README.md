@@ -30,6 +30,36 @@ reachable. Tip: if your browser is already signed in to GitHub as a
 different user, sign out or use a private window first, otherwise GitHub
 will re-use that session.
 
+### Remembering accounts
+
+Once you pick an account for a repo **owner** (the user or organization in
+`github.com/<owner>/<repo>`), the picker remembers it. Next time git talks
+to any repo of that owner, it switches to the remembered account
+automatically, with no prompt. So mixing personal and work repos asks
+once per owner, not every time you change repos.
+
+A choice is remembered when:
+
+- git rejects the active account for a repo and you pick another one, or
+- you run `git-switch-account.sh` from a terminal **inside a clone** of a
+  github.com repo. This is also the way to teach it a private repo, where
+  GitHub answers "not found" rather than rejecting the account.
+
+The desktop shortcut (run from no particular repo) doesn't remember
+anything; it just switches.
+
+```bash
+~/.git-account-picker/bin/git-switch-account.sh --list            # what's remembered
+~/.git-account-picker/bin/git-switch-account.sh --forget my-company # undo one
+```
+
+Remembered choices live in `~/.config/git-account-picker/owners` (one
+`owner account` per line). Set `GIT_ACCOUNT_PICKER_REMEMBER=0` to turn the
+feature off. It needs git to tell the picker which repo it's talking to,
+which `install.sh` turns on with
+`git config --global credential.https://github.com.useHttpPath true`. If
+you installed an earlier version, run the installer again to enable it.
+
 The prompt itself, whichever triggers it:
 
 - **Terminal git usage** (plain shell, no IDE) -> a numbered menu prints in
@@ -81,7 +111,9 @@ Pass a different directory as an argument to install elsewhere, e.g.
 `.\install-windows.ps1 -InstallDir D:\tools\git-account-picker`.
 
 Installs to `~/.git-account-picker` by default, points git's
-`credential.helper` for `github.com`/`gist.github.com` at it, and creates a
+`credential.helper` for `github.com`/`gist.github.com` at it, turns on
+`credential.https://github.com.useHttpPath` (so it can
+[remember accounts](#remembering-accounts) per owner), and creates a
 **"Switch GitHub Account" desktop shortcut**.
 
 Double-clicking the shortcut opens the same account picker on demand —
@@ -106,8 +138,9 @@ It can also be run from a terminal directly:
 | Windows | `.\uninstall-windows.ps1` |
 | macOS / Linux | `./uninstall.sh` |
 
-Removes the credential helper config it added, deletes the desktop
-shortcut, and deletes the installed copy. Your normal `credential.helper`
+Removes the credential helper and `useHttpPath` config it added, deletes
+the desktop shortcut, and deletes the installed copy. Remembered accounts
+in `~/.config/git-account-picker/` are kept, in case you reinstall. Your normal `credential.helper`
 (e.g. Git Credential Manager) and your `gh` login sessions are left alone.
 
 ## How it works
@@ -115,9 +148,10 @@ shortcut, and deletes the installed copy. Your normal `credential.helper`
 Git calls the configured credential helper's `get`/`store`/`erase` hooks
 as it needs auth for a host. This helper:
 
-1. On `get`: normally just passes straight through to
-   `gh auth git-credential get`, which returns whatever account is
-   currently active — no prompt. First, though (throttled to once per
+1. On `get`: if an account is remembered for the repo's owner and it
+   isn't the active one, switches to it (`gh auth switch`). Then it passes
+   straight through to `gh auth git-credential get`, which returns
+   whatever account is currently active — no prompt. First, though (throttled to once per
    `GIT_ACCOUNT_PICKER_VALIDATE_TTL` seconds, default 60), it runs `gh api user`
    against the real API to make sure the active account's token is
    actually still good. If it isn't, it prompts you to pick an account,
@@ -126,7 +160,8 @@ as it needs auth for a host. This helper:
    instead of leaving you with a still-broken credential.
 2. On `erase` (git calls this when the server rejects a credential it just
    tried with an HTTP 401 — wrong account for this repo): same
-   prompt-then-switch-then-validate flow as above. git retries the
+   prompt-then-switch-then-validate flow as above, and the account you
+   pick is remembered for that repo's owner. git retries the
    original `get` automatically within the same operation right after
    `erase`, so the *next* attempt succeeds with no extra step from you.
 3. `store` is passed through unchanged.

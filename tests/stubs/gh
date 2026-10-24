@@ -35,6 +35,16 @@ case "${1:-} ${2:-}" in
     # `gh config get -h github.com user` -> active account
     head -n 1 "$state"
     ;;
+  "auth git-credential")
+    # Dummy values only; never a real token.
+    cat >/dev/null
+    if [ "${3:-}" = "get" ]; then
+      echo "protocol=https"
+      echo "host=github.com"
+      echo "username=$(head -n 1 "$state")"
+      echo "password=fake-token-for-tests"
+    fi
+    ;;
   "api user")
     [ -s "$state" ] && [ ! -e "${FAKE_GH_DIR}/token-invalid" ]
     ;;

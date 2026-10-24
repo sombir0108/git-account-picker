@@ -37,13 +37,23 @@ source "$SCRIPT_DIR/../lib/picker-common.sh"
 
 host="$(printf '%s\n' "$input" | sed -n 's/^host=//p' | tr -d '\r')"
 
+# Repo owner (user or organization) for remembering which account it uses.
+# Only sent when credential.useHttpPath is on, which install.sh sets for
+# github.com; gist paths are gist IDs, not owners.
+owner=""
+if [ "$host" = "github.com" ]; then
+  path="$(printf '%s\n' "$input" | sed -n 's/^path=//p' | tr -d '\r')"
+  owner="$(owner_from_path "$path" || true)"
+fi
+
 if [ "$host" = "github.com" ] || [ "$host" = "gist.github.com" ]; then
   if [ "$op" = "erase" ]; then
     if ensure_gh_installed; then
-      handle_invalid_credential "github.com"
+      handle_invalid_credential "github.com" "$owner"
     fi
   elif [ "$op" = "get" ]; then
     if ensure_gh_installed; then
+      use_remembered_account "github.com" "$owner"
       ensure_valid_credential "github.com"
     fi
   fi
