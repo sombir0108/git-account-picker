@@ -43,6 +43,7 @@ set_accounts() {
 
 # --- read_lines (mapfile stand-in for bash 3.2) -----------------------------
 
+lines=()
 read_lines lines < <(printf '%s\n' one "two words" three)
 check "read_lines keeps one element per line" "3|two words" "${#lines[@]}|${lines[1]}"
 

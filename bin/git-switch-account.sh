@@ -15,6 +15,7 @@ if ! ensure_gh_installed; then
   exit 1
 fi
 
+accounts=()
 read_lines accounts < <(ensure_gh_login "$host")
 
 if [ "${#accounts[@]}" -eq 0 ]; then
