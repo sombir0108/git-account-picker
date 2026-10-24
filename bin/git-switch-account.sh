@@ -23,7 +23,9 @@ if [ "${#accounts[@]}" -eq 0 ]; then
   exit 1
 fi
 
-chosen="$(pick_account "$host" "${accounts[@]}")"
+# Always show the list, even with one account, so "Add account..." is
+# reachable from the shortcut.
+chosen="$(PICKER_ALWAYS_ASK=1 pick_account "$host" "${accounts[@]}")"
 gh auth switch --hostname "$host" --user "$chosen" >/dev/null
 echo "Switched active GitHub account to: $chosen"
 

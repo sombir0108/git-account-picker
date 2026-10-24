@@ -30,8 +30,6 @@ Found a bug or have an idea but don't want to write code? Open an issue.
 
 - Real-world testing on **macOS and Linux** (the popups use `osascript`,
   `zenity` and `kdialog`; they are written but have had little testing).
-- An **Add account** option in the terminal menu and the macOS/Linux popups
-  (the Windows popup already has it).
 - A **Remove account** option.
 
 ## Checking your change

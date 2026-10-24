@@ -20,14 +20,15 @@ an account when:
 
 ![The account picker popup on Windows, listing three accounts with Add account..., Switch and Cancel buttons](docs/images/windows-picker.png)
 
-**Adding another account:** the Windows popup (shortcut and in-IDE prompt)
-has an **Add account...** button. It runs the browser sign-in
-(`gh auth login --web --scopes workflow`), refreshes the list, and shows
-the popup again so the new account can be picked straight away. Tip: if
-your browser is already signed in to GitHub as a different user, sign out
-or use a private window first, otherwise GitHub will re-use that session.
-(macOS/Linux popups and the terminal menu don't have the button yet; use
-`gh auth login` there.)
+**Adding another account:** every prompt has an **Add account...** entry —
+a button in the Windows popup, a list entry in the macOS/Linux popups, and
+`a` in the terminal menu. It runs the browser sign-in
+(`gh auth login --web --scopes workflow`), refreshes the list, and asks
+again so the new account can be picked straight away. The desktop shortcut
+always shows the list, even with a single account, so this stays
+reachable. Tip: if your browser is already signed in to GitHub as a
+different user, sign out or use a private window first, otherwise GitHub
+will re-use that session.
 
 The prompt itself, whichever triggers it:
 
@@ -36,7 +37,8 @@ The prompt itself, whichever triggers it:
 - **IDEs / GUI git clients** (VS Code, JetBrains, GitHub Desktop, etc. —
   anything that spawns git without a real terminal attached) -> a native
   popup instead: WinForms on Windows, `osascript` on macOS, `zenity`/
-  `kdialog` on Linux.
+  `kdialog` on Linux. Setting `GIT_TERMINAL_PROMPT=0` also forces the
+  popup.
 
 The account list is read live from `gh auth status` — add or remove
 accounts with `gh auth login` / `gh auth logout` and the picker picks it up

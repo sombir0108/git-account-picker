@@ -16,8 +16,20 @@ os_kind() {
   esac
 }
 
+# Label of the extra "add an account" entry in the terminal menu and popups.
+PICKER_ADD_LABEL="Add account..."
+
+# True when a person is at a terminal. Checks stderr, not stdout: git pipes
+# a credential helper's stdout, and callers capture ours with $(...), so
+# stdout is never a terminal here even in a plain shell. IDEs and GUI git
+# clients pipe stderr too, so they still get a popup. GIT_TERMINAL_PROMPT=0
+# (set by tools that must never block on terminal input) forces the popup.
+in_terminal() {
+  [ "${GIT_TERMINAL_PROMPT:-1}" != "0" ] && [ -t 2 ] && [ -r /dev/tty ]
+}
+
 has_tty() {
-  [ -t 1 ] && { exec 3<>/dev/tty; } 2>/dev/null
+  in_terminal && { exec 3<>/dev/tty; } 2>/dev/null
 }
 
 # Reads stdin into the array named $1, one element per line. Stands in for
@@ -43,11 +55,15 @@ prompt_cli() {
     echo "Choose GitHub account for $host:"
     local i=1
     for a in "${accounts[@]}"; do echo "  $i) $a"; i=$((i + 1)); done
-    printf "Account [1-%d]: " "${#accounts[@]}"
+    echo "  a) $PICKER_ADD_LABEL"
+    printf "Account [1-%d, or a]: " "${#accounts[@]}"
   } >&3
   local choice
   read -r choice <&3 || choice=1
   exec 3>&- 2>/dev/null || true
+  case "$choice" in
+    a|A) printf '__ADD__'; return ;;
+  esac
   local idx=$((choice - 1))
   if [ "$idx" -ge 0 ] 2>/dev/null && [ "$idx" -lt "${#accounts[@]}" ] 2>/dev/null; then
     printf '%s' "${accounts[$idx]}"
@@ -70,13 +86,15 @@ prompt_gui_macos() {
   local host="$1"; shift
   local accounts=("$@")
   local list=""
-  for a in "${accounts[@]}"; do
+  for a in "${accounts[@]}" "$PICKER_ADD_LABEL"; do
     if [ -z "$list" ]; then list="\"$a\""; else list="$list, \"$a\""; fi
   done
   local result
   result="$(osascript -e "choose from list {$list} with prompt \"Choose GitHub account for $host:\" with title \"GitHub Account Picker\"" 2>/dev/null || echo false)"
   if [ "$result" = "false" ] || [ -z "$result" ]; then
     printf '%s' "${accounts[0]}"
+  elif [ "$result" = "$PICKER_ADD_LABEL" ]; then
+    printf '__ADD__'
   else
     printf '%s' "$result"
   fi
@@ -85,24 +103,31 @@ prompt_gui_macos() {
 prompt_gui_linux() {
   local host="$1"; shift
   local accounts=("$@")
+  local sel=""
   if command -v zenity >/dev/null 2>&1; then
-    zenity --list --title="GitHub Account Picker" \
+    sel="$(zenity --list --title="GitHub Account Picker" \
       --text="Choose GitHub account for $host:" \
-      --column="Account" "${accounts[@]}" --height=300 --width=400 2>/dev/null \
-      || printf '%s' "${accounts[0]}"
+      --column="Account" "${accounts[@]}" "$PICKER_ADD_LABEL" \
+      --height=300 --width=400 2>/dev/null || true)"
   elif command -v kdialog >/dev/null 2>&1; then
-    local args=() i=0
-    for a in "${accounts[@]}"; do args+=("$i" "$a"); i=$((i + 1)); done
-    local sel
+    # kdialog --menu prints the chosen item's tag, so tag each item with the
+    # account name itself.
+    local args=()
+    for a in "${accounts[@]}"; do args+=("$a" "$a"); done
+    args+=("__ADD__" "$PICKER_ADD_LABEL")
     sel="$(kdialog --title "GitHub Account Picker" --menu "Choose GitHub account for $host:" "${args[@]}" 2>/dev/null || true)"
-    if [ -n "$sel" ]; then printf '%s' "$sel"; else printf '%s' "${accounts[0]}"; fi
+  fi
+  if [ "$sel" = "$PICKER_ADD_LABEL" ] || [ "$sel" = "__ADD__" ]; then
+    printf '__ADD__'
+  elif [ -n "$sel" ]; then
+    printf '%s' "$sel"
   else
     printf '%s' "${accounts[0]}"
   fi
 }
 
 confirm_install_gh() {
-  if [ -t 1 ] && [ -r /dev/tty ]; then
+  if in_terminal; then
     local ans
     {
       echo ""
@@ -207,7 +232,7 @@ open_browser_login() {
   # .github/workflows files, and gh does not request it by default.
   local login_cmd="gh auth login --hostname $host --git-protocol https --web --scopes workflow"
 
-  if [ -t 1 ] && [ -r /dev/tty ]; then
+  if in_terminal; then
     eval "$login_cmd" < /dev/tty > /dev/tty 2>&1 || true
     return
   fi
@@ -328,38 +353,49 @@ ensure_valid_credential() {
   mark_validated "$host"
 }
 
-pick_account() {
+# Shows the terminal menu or the popup once. Prints the chosen account name,
+# or "__ADD__" when "Add account..." was chosen.
+prompt_once() {
   local host="$1"; shift
-  local accounts=("$@")
-
-  if [ "${#accounts[@]}" -le 1 ]; then
-    printf '%s' "${accounts[0]:-}"
-    return
-  fi
 
   if has_tty; then
-    prompt_cli "$host" "${accounts[@]}"
+    prompt_cli "$host" "$@"
     return
   fi
 
   case "$(os_kind)" in
     windows)
       if command -v powershell.exe >/dev/null 2>&1; then
-        local picked
-        picked="$(prompt_gui_windows "$host" "${accounts[@]}")"
-        # "Add account..." clicked: run the browser sign-in, refresh the
-        # list, and ask again so the new account can be picked right away.
-        while [ "$picked" = "__ADD__" ]; do
-          open_browser_login "$host" >&2
-          read_lines accounts < <(list_gh_accounts "$host")
-          picked="$(prompt_gui_windows "$host" "${accounts[@]}")"
-        done
-        printf '%s' "$picked"
+        prompt_gui_windows "$host" "$@"
       else
-        printf '%s' "${accounts[0]}"
+        printf '%s' "$1"
       fi
       ;;
-    macos) prompt_gui_macos "$host" "${accounts[@]}" ;;
-    linux) prompt_gui_linux "$host" "${accounts[@]}" ;;
+    macos) prompt_gui_macos "$host" "$@" ;;
+    linux) prompt_gui_linux "$host" "$@" ;;
   esac
+}
+
+# Prints the account to use for $host. With one account it is used without
+# asking, unless PICKER_ALWAYS_ASK=1 (the desktop shortcut sets it so "Add
+# account..." stays reachable).
+pick_account() {
+  local host="$1"; shift
+  local accounts=("$@")
+
+  if [ "${#accounts[@]}" -le 1 ] && [ "${PICKER_ALWAYS_ASK:-0}" != "1" ]; then
+    printf '%s' "${accounts[0]:-}"
+    return
+  fi
+
+  local picked
+  picked="$(prompt_once "$host" "${accounts[@]}")"
+  # "Add account..." chosen: run the browser sign-in, refresh the list, and
+  # ask again so the new account can be picked right away.
+  while [ "$picked" = "__ADD__" ]; do
+    open_browser_login "$host" >&2
+    read_lines accounts < <(list_gh_accounts "$host")
+    picked="$(prompt_once "$host" "${accounts[@]}")"
+  done
+  printf '%s' "$picked"
 }
