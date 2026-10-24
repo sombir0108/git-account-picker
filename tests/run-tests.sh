@@ -75,6 +75,45 @@ check "a single account is picked without asking" \
   "only-account" \
   "$(pick_account github.com only-account </dev/null 2>/dev/null)"
 
+# --- terminal detection -----------------------------------------------------
+
+in_terminal 2>/dev/null && r=yes || r=no
+check "stderr redirected away from a terminal means no terminal menu" "no" "$r"
+
+# --- "Add account..." loop ---------------------------------------------------
+# Replace the real prompt and browser sign-in with scripted versions: the
+# first prompt picks "Add account...", the sign-in adds new-account, and the
+# second prompt picks whatever is now last in the list.
+
+real_prompt_once="$(declare -f prompt_once)"
+real_open_browser_login="$(declare -f open_browser_login)"
+prompt_once() {
+  shift
+  if [ ! -e "$WORK_DIR/asked-once" ]; then
+    touch "$WORK_DIR/asked-once"
+    printf '__ADD__'
+  else
+    local last
+    for last; do :; done
+    printf '%s' "$last"
+  fi
+}
+open_browser_login() { echo new-account >> "$FAKE_GH_DIR/accounts"; }
+
+set_accounts personal-account work-account
+check "Add account... signs in and offers the new account" \
+  "new-account" \
+  "$(pick_account github.com personal-account work-account 2>/dev/null)"
+
+rm -f "$WORK_DIR/asked-once"
+set_accounts only-account
+check "PICKER_ALWAYS_ASK shows the list even with one account" \
+  "new-account" \
+  "$(PICKER_ALWAYS_ASK=1 pick_account github.com only-account 2>/dev/null)"
+
+eval "$real_prompt_once"
+eval "$real_open_browser_login"
+
 # --- validation throttling --------------------------------------------------
 
 rm -rf "$GIT_ACCOUNT_PICKER_CACHE_DIR"
