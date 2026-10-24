@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Fake GitHub CLI for tests/run-tests.sh. Reads its state from
+# $FAKE_GH_DIR/accounts (one account per line, first = active) and only
+# implements the few subcommands the picker uses.
+set -uo pipefail
+
+state="${FAKE_GH_DIR:?FAKE_GH_DIR not set}/accounts"
+touch "$state"
+
+case "${1:-} ${2:-}" in
+  "auth status")
+    if [ ! -s "$state" ]; then
+      echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2
+      exit 1
+    fi
+    echo "github.com"
+    first=1
+    while IFS= read -r a; do
+      [ -n "$a" ] || continue
+      echo "  ✓ Logged in to github.com account $a (keyring)"
+      if [ "$first" -eq 1 ]; then echo "  - Active account: true"; first=0
+      else echo "  - Active account: false"; fi
+    done < "$state"
+    ;;
+  "auth switch")
+    user=""
+    while [ $# -gt 0 ]; do
+      case "$1" in --user) user="$2"; shift ;; esac
+      shift
+    done
+    grep -qx "$user" "$state" || { echo "not logged in to $user" >&2; exit 1; }
+    { echo "$user"; grep -vx "$user" "$state"; } > "$state.new" && mv "$state.new" "$state"
+    ;;
+  "config get")
+    # `gh config get -h github.com user` -> active account
+    head -n 1 "$state"
+    ;;
+  "api user")
+    [ -s "$state" ] && [ ! -e "${FAKE_GH_DIR}/token-invalid" ]
+    ;;
+  *)
+    echo "fake gh: unsupported command: $*" >&2
+    exit 1
+    ;;
+esac

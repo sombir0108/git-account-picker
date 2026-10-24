@@ -36,11 +36,21 @@ Found a bug or have an idea but don't want to write code? Open an issue.
 
 ## Checking your change
 
+Every pull request is checked automatically on GitHub (see
+`.github/workflows/checks.yml`): shell scripts must use LF line endings,
+pass `bash -n` and ShellCheck, the tests in `tests/` must pass, and every
+`.ps1` must parse under Windows PowerShell 5.1. To run the same checks
+locally first:
+
 ```bash
 bash -n install.sh uninstall.sh bin/*.sh lib/*.sh
+bash tests/run-tests.sh
 ```
 
-and, on Windows, parse-check each `.ps1` you touched:
+The tests use a fake `gh` (`tests/stubs/gh`), so they never touch your real
+GitHub accounts.
+
+On Windows, parse-check each `.ps1` you touched:
 
 ```powershell
 $e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("gui\switch-account.ps1",[ref]$null,[ref]$e); $e
