@@ -497,6 +497,22 @@ remember_account() {
   echo "$owner $account" >> "$GIT_ACCOUNT_PICKER_OWNERS_FILE"
 }
 
+# Called from `store`, which git sends after the server accepted a
+# credential: remember the account that just worked for this owner. So
+# switching once by any means (desktop shortcut included) is enough, and
+# private repos are learned too, even though a wrong account there gets
+# "not found" rather than a rejection that would reach `erase`.
+remember_working_account() {
+  local owner="$1" account="$2"
+  [ -n "$owner" ] && remember_enabled || return 0
+  case "$account" in
+    ""|*[!A-Za-z0-9-]*) return 0 ;;
+  esac
+  [ "$(remembered_account "$owner")" != "$account" ] || return 0
+  remember_account "$owner" "$account"
+  echo "git-account-picker: will use '$account' for $owner from now on (undo: git-switch-account.sh --forget $owner)." >&2
+}
+
 # Called from `get`. When an account is remembered for this owner and isn't
 # the active one, switch to it. Costs nothing for owners with no remembered
 # account; otherwise one local `gh config get` (no network).
