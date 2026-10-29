@@ -56,6 +56,9 @@ if [ "$host" = "github.com" ] || [ "$host" = "gist.github.com" ]; then
       use_remembered_account "github.com" "$owner"
       ensure_valid_credential "github.com"
     fi
+  elif [ "$op" = "store" ]; then
+    # git sends `store` only after the server accepted the credential.
+    remember_working_account "$owner" "$(printf '%s\n' "$input" | sed -n 's/^username=//p' | tr -d '\r')"
   fi
 fi
 

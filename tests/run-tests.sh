@@ -217,6 +217,25 @@ out="$(printf 'url=https://github.com/my-company/repo.git\n\n' \
 check "git with useHttpPath gets the remembered owner's account" "username=work-account" \
   "$(printf '%s\n' "$out" | grep '^username=')"
 
+# Learning from success: git runs `store` after the server accepts a
+# credential (simulated with `git credential approve`). The account that
+# worked is remembered for the owner, e.g. after switching with the desktop
+# shortcut, which knows nothing about repos.
+forget_account new-org
+printf 'url=https://github.com/New-Org/repo.git\nusername=work-account\npassword=fake\n\n' \
+  | GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git \
+      -c "credential.https://github.com.helper=!bash '$REPO_DIR/bin/git-credential-account-picker.sh'" \
+      -c "credential.https://github.com.useHttpPath=true" \
+      credential approve 2>/dev/null
+check "an account that worked for an owner is remembered" "work-account" "$(remembered_account new-org)"
+
+remember_working_account new-org work-account 2>"$WORK_DIR/err"
+[ -s "$WORK_DIR/err" ] && r=yes || r=no
+check "an already-remembered account is not announced again" "no" "$r"
+
+remember_working_account gist-like "" 2>/dev/null
+check "nothing is remembered without a username" "" "$(remembered_account gist-like)"
+
 echo ""
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

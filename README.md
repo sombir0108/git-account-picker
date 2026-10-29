@@ -38,15 +38,19 @@ to any repo of that owner, it switches to the remembered account
 automatically, with no prompt. So mixing personal and work repos asks
 once per owner, not every time you change repos.
 
-A choice is remembered when:
+It learns by itself: whenever a git operation that needs your sign-in
+(a push, or a fetch of a private repo) **succeeds**, the account that
+worked is remembered for that repo's owner. So the usual routine is:
 
-- git rejects the active account for a repo and you pick another one, or
-- you run `git-switch-account.sh` from a terminal **inside a clone** of a
-  github.com repo. This is also the way to teach it a private repo, where
-  GitHub answers "not found" rather than rejecting the account.
+1. The first time you work with an owner, switch to the right account as
+   you do today (desktop shortcut, popup or terminal menu), then push or
+   pull. You'll see `will use '<account>' for <owner> from now on`.
+2. From then on, git switches to that account automatically for that
+   owner's repos, even after you've switched away for another owner.
 
-The desktop shortcut (run from no particular repo) doesn't remember
-anything; it just switches.
+Fetching a *public* repo needs no sign-in, so it doesn't teach it
+anything. You can also teach it directly by running `git-switch-account.sh`
+from a terminal **inside a clone** of a github.com repo.
 
 ```bash
 ~/.git-account-picker/bin/git-switch-account.sh --list            # what's remembered
@@ -164,7 +168,9 @@ as it needs auth for a host. This helper:
    pick is remembered for that repo's owner. git retries the
    original `get` automatically within the same operation right after
    `erase`, so the *next* attempt succeeds with no extra step from you.
-3. `store` is passed through unchanged.
+3. On `store` (git calls this after the server *accepted* a credential):
+   remembers the account that worked for the repo's owner, then passes
+   through to `gh auth git-credential store`.
 
 Why both `get`-time validation and `erase` exist: git only calls `erase`
 on a 401. Some real failures never produce that — e.g. org SSO
