@@ -29,6 +29,7 @@ cp "$SRC_DIR/lib/picker-common.sh" "$INSTALL_DIR/lib/"
 cp "$SRC_DIR/gui/picker-gui.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/switch-account.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/create-desktop-shortcut.ps1" "$INSTALL_DIR/gui/"
+cp "$SRC_DIR/gui/icon.ico" "$SRC_DIR/gui/icon.png" "$INSTALL_DIR/gui/"
 chmod +x "$INSTALL_DIR/bin/git-credential-account-picker.sh" "$INSTALL_DIR/bin/git-switch-account.sh"
 
 for host in github.com gist.github.com; do
@@ -70,6 +71,7 @@ Type=Application
 Name=Switch GitHub Account
 Comment=Switch the active GitHub CLI/git account
 Exec=bash "$INSTALL_DIR/bin/git-switch-account.sh"
+Icon=$INSTALL_DIR/gui/icon.png
 Terminal=false
 Categories=Utility;
 DESK

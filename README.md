@@ -18,7 +18,7 @@ an account when:
 - you deliberately ask, via the **desktop shortcut** or by running
   `git-switch-account.sh` yourself.
 
-![The account picker popup on Windows, listing three accounts with Add account..., Switch and Cancel buttons](docs/images/windows-picker.png)
+![The account picker popup on Windows, listing three accounts with Add account..., Remove..., Switch and Cancel buttons](docs/images/windows-picker.png)
 
 **Adding another account:** every prompt has an **Add account...** entry —
 a button in the Windows popup, a list entry in the macOS/Linux popups, and
@@ -29,6 +29,14 @@ always shows the list, even with a single account, so this stays
 reachable. Tip: if your browser is already signed in to GitHub as a
 different user, sign out or use a private window first, otherwise GitHub
 will re-use that session.
+
+**Removing an account:** every prompt also has **Remove account...** — a
+**Remove...** button in the Windows popup, a list entry in the
+macOS/Linux popups, and `r` in the terminal menu. After you confirm, it
+signs that account out of this computer (`gh auth logout`), drops it from
+the list, and forgets any repo owners remembered for it. **Your GitHub
+account itself is not deleted** — add it back any time with **Add
+account...**.
 
 ### Remembering accounts
 
@@ -128,6 +136,11 @@ git command:
   (no Git Bash dependency for the double-click path).
 - macOS: a `Switch GitHub Account.command` file on your Desktop.
 - Linux: a `switch-github-account.desktop` launcher on your Desktop.
+
+On Windows and Linux the shortcut gets the app's icon — two people (your
+accounts) with a green switch badge (`gui/icon.ico` / `gui/icon.png`,
+drawn by `tools/make-icon.ps1`). The macOS `.command` file keeps the
+standard Terminal icon.
 
 It can also be run from a terminal directly:
 

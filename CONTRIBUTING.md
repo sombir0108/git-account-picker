@@ -30,7 +30,7 @@ Found a bug or have an idea but don't want to write code? Open an issue.
 
 - Real-world testing on **macOS and Linux** (the popups use `osascript`,
   `zenity` and `kdialog`; they are written but have had little testing).
-- A **Remove account** option.
+- An app icon for the macOS desktop shortcut.
 
 ## Checking your change
 

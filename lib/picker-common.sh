@@ -16,8 +16,10 @@ os_kind() {
   esac
 }
 
-# Label of the extra "add an account" entry in the terminal menu and popups.
+# Labels of the extra entries in the terminal menu and popups.
 PICKER_ADD_LABEL="Add account..."
+PICKER_REMOVE_LABEL="Remove account..."
+PICKER_REMOVE_NOTE="It is removed from this list and git stops using it. Your GitHub account itself is not deleted, and you can add it back with Add account..."
 
 # True when a person is at a terminal. Checks stderr, not stdout: git pipes
 # a credential helper's stdout, and callers capture ours with $(...), so
@@ -47,6 +49,20 @@ list_gh_accounts() {
   gh auth status --hostname "$host" 2>&1 | sed -n 's/.*Logged in to [^ ]* account \([^ ]*\).*/\1/p'
 }
 
+# Prints the account at 1-based position $1 of the remaining arguments, or
+# nothing when $1 isn't one of the listed numbers.
+nth_account() {
+  local n="$1"; shift
+  case "$n" in ""|*[!0-9]*) return 0 ;; esac
+  [ "$n" -ge 1 ] && [ "$n" -le "$#" ] || return 0
+  eval "printf '%s' \"\${$n}\""
+}
+
+# Every prompt below prints one of: an account name, "__ADD__",
+# "__REMOVE__:<account>" (removal already confirmed), "__AGAIN__" (removal
+# declined: show the list again), nothing (cancelled), or "__NONE__" (no
+# way to show a prompt here).
+
 prompt_cli() {
   local host="$1"; shift
   local accounts=("$@")
@@ -56,19 +72,30 @@ prompt_cli() {
     local i=1
     for a in "${accounts[@]}"; do echo "  $i) $a"; i=$((i + 1)); done
     echo "  a) $PICKER_ADD_LABEL"
-    printf "Account [1-%d, a to add, Enter to cancel]: " "${#accounts[@]}"
+    echo "  r) $PICKER_REMOVE_LABEL"
+    printf "Account [1-%d, a to add, r to remove, Enter to cancel]: " "${#accounts[@]}"
   } >&3
-  local choice
+  local choice result=""
   read -r choice <&3 || choice=""
-  exec 3>&- 2>/dev/null || true
   case "$choice" in
-    a|A) printf '__ADD__'; return ;;
+    a|A) result="__ADD__" ;;
+    r|R)
+      local which target ans
+      printf "Remove which account [1-%d]: " "${#accounts[@]}" >&3
+      read -r which <&3 || which=""
+      target="$(nth_account "$which" "${accounts[@]}")"
+      result="__AGAIN__"
+      if [ -n "$target" ]; then
+        printf "%s\nSign out of '%s' on this computer? [y/N]: " "$PICKER_REMOVE_NOTE" "$target" >&3
+        read -r ans <&3 || ans=""
+        case "$ans" in y|Y|yes|Yes) result="__REMOVE__:$target" ;; esac
+      fi
+      ;;
+    # Anything other than a listed number (including just Enter) cancels.
+    *) result="$(nth_account "$choice" "${accounts[@]}")" ;;
   esac
-  # Anything other than a listed number (including just Enter) cancels.
-  local idx=$((choice - 1))
-  if [ "$idx" -ge 0 ] 2>/dev/null && [ "$idx" -lt "${#accounts[@]}" ] 2>/dev/null; then
-    printf '%s' "${accounts[$idx]}"
-  fi
+  exec 3>&- 2>/dev/null || true
+  printf '%s' "$result"
 }
 
 prompt_gui_windows() {
@@ -81,20 +108,34 @@ prompt_gui_windows() {
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps_path" -HostName "$host" -Accounts "$joined" 2>/dev/null | tr -d '\r'
 }
 
+# Builds an AppleScript list literal from the arguments.
+applescript_list() {
+  local list="" a
+  for a in "$@"; do
+    if [ -z "$list" ]; then list="\"$a\""; else list="$list, \"$a\""; fi
+  done
+  printf '{%s}' "$list"
+}
+
 prompt_gui_macos() {
   local host="$1"; shift
   local accounts=("$@")
-  local list=""
-  for a in "${accounts[@]}" "$PICKER_ADD_LABEL"; do
-    if [ -z "$list" ]; then list="\"$a\""; else list="$list, \"$a\""; fi
-  done
   local result
   # Cancel makes `choose from list` print "false"; osascript itself failing
   # (e.g. no GUI session over SSH) means no popup could be shown.
-  result="$(osascript -e "choose from list {$list} with prompt \"Choose GitHub account for $host:\" with title \"GitHub Account Picker\"" 2>/dev/null)" \
+  result="$(osascript -e "choose from list $(applescript_list "${accounts[@]}" "$PICKER_ADD_LABEL" "$PICKER_REMOVE_LABEL") with prompt \"Choose GitHub account for $host:\" with title \"GitHub Account Picker\"" 2>/dev/null)" \
     || { printf '__NONE__'; return; }
   if [ "$result" = "$PICKER_ADD_LABEL" ]; then
     printf '__ADD__'
+  elif [ "$result" = "$PICKER_REMOVE_LABEL" ]; then
+    local target answer
+    target="$(osascript -e "choose from list $(applescript_list "${accounts[@]}") with prompt \"Remove which account?\" with title \"Remove account\"" 2>/dev/null || true)"
+    if [ -z "$target" ] || [ "$target" = "false" ]; then printf '__AGAIN__'; return; fi
+    answer="$(osascript -e "display dialog \"Sign out of '$target' on this computer?\" & return & return & \"$PICKER_REMOVE_NOTE\" with title \"Remove account\" buttons {\"Cancel\", \"Remove\"} default button \"Cancel\" with icon caution" 2>/dev/null || true)"
+    case "$answer" in
+      *"button returned:Remove"*) printf '__REMOVE__:%s' "$target" ;;
+      *) printf '__AGAIN__' ;;
+    esac
   elif [ "$result" != "false" ]; then
     printf '%s' "$result"
   fi
@@ -103,28 +144,54 @@ prompt_gui_macos() {
 prompt_gui_linux() {
   local host="$1"; shift
   local accounts=("$@")
-  local sel=""
+  local sel="" tool
   if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     printf '__NONE__'
     return
   elif command -v zenity >/dev/null 2>&1; then
+    tool=zenity
     sel="$(zenity --list --title="GitHub Account Picker" \
       --text="Choose GitHub account for $host:" \
-      --column="Account" "${accounts[@]}" "$PICKER_ADD_LABEL" \
+      --column="Account" "${accounts[@]}" "$PICKER_ADD_LABEL" "$PICKER_REMOVE_LABEL" \
       --height=300 --width=400 2>/dev/null || true)"
   elif command -v kdialog >/dev/null 2>&1; then
+    tool=kdialog
     # kdialog --menu prints the chosen item's tag, so tag each item with the
     # account name itself.
     local args=()
     for a in "${accounts[@]}"; do args+=("$a" "$a"); done
-    args+=("__ADD__" "$PICKER_ADD_LABEL")
+    args+=("__ADD__" "$PICKER_ADD_LABEL" "__REMOVE__" "$PICKER_REMOVE_LABEL")
     sel="$(kdialog --title "GitHub Account Picker" --menu "Choose GitHub account for $host:" "${args[@]}" 2>/dev/null || true)"
   else
     printf '__NONE__'
     return
   fi
+
   if [ "$sel" = "$PICKER_ADD_LABEL" ] || [ "$sel" = "__ADD__" ]; then
     printf '__ADD__'
+  elif [ "$sel" = "$PICKER_REMOVE_LABEL" ] || [ "$sel" = "__REMOVE__" ]; then
+    local target="" question
+    if [ "$tool" = zenity ]; then
+      target="$(zenity --list --title="Remove account" --text="Remove which account?" \
+        --column="Account" "${accounts[@]}" --height=300 --width=400 2>/dev/null || true)"
+      question="Sign out of '$target' on this computer?
+
+$PICKER_REMOVE_NOTE"
+      [ -n "$target" ] && zenity --question --title="Remove account" --text="$question" \
+        --ok-label="Remove" --cancel-label="Cancel" 2>/dev/null \
+        && { printf '__REMOVE__:%s' "$target"; return; }
+    else
+      local args=()
+      for a in "${accounts[@]}"; do args+=("$a" "$a"); done
+      target="$(kdialog --title "Remove account" --menu "Remove which account?" "${args[@]}" 2>/dev/null || true)"
+      question="Sign out of '$target' on this computer?
+
+$PICKER_REMOVE_NOTE"
+      [ -n "$target" ] && kdialog --title "Remove account" --warningyesno "$question" \
+        --yes-label "Remove" --no-label "Cancel" 2>/dev/null \
+        && { printf '__REMOVE__:%s' "$target"; return; }
+    fi
+    printf '__AGAIN__'
   else
     printf '%s' "$sel"
   fi
@@ -414,11 +481,20 @@ pick_account() {
 
   local picked
   picked="$(prompt_once "$host" "${accounts[@]}")"
-  # "Add account..." chosen: run the browser sign-in, refresh the list, and
-  # ask again so the new account can be picked right away.
-  while [ "$picked" = "__ADD__" ]; do
-    open_browser_login "$host" >&2
+  # "Add account..." or "Remove account..." chosen: do it, refresh the list,
+  # and ask again so the change shows straight away.
+  while :; do
+    case "$picked" in
+      __ADD__) open_browser_login "$host" >&2 ;;
+      __REMOVE__:*) remove_account "$host" "${picked#__REMOVE__:}" ;;
+      __AGAIN__) ;;
+      *) break ;;
+    esac
     read_lines accounts < <(list_gh_accounts "$host")
+    if [ "${#accounts[@]}" -eq 0 ]; then
+      echo "git-account-picker: no GitHub accounts are signed in on this computer any more. Add one with the desktop shortcut or 'gh auth login'." >&2
+      return 0
+    fi
     picked="$(prompt_once "$host" "${accounts[@]}")"
   done
 
@@ -488,6 +564,25 @@ forget_account() {
   local owner="$1" file="$GIT_ACCOUNT_PICKER_OWNERS_FILE"
   [ -f "$file" ] || return 0
   awk -v o="$owner" '$1 != o' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
+# Forgets every owner remembered for $1, e.g. once that account is removed.
+forget_owners_of() {
+  local account="$1" file="$GIT_ACCOUNT_PICKER_OWNERS_FILE"
+  [ -f "$file" ] || return 0
+  awk -v a="$account" '$2 != a' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
+# "Remove account...": signs the account out of gh on this computer (the
+# GitHub account itself is untouched) and forgets owners remembered for it.
+remove_account() {
+  local host="$1" account="$2"
+  if gh auth logout --hostname "$host" --user "$account" >/dev/null 2>&1; then
+    forget_owners_of "$account"
+    echo "git-account-picker: signed out of '$account' on this computer. The GitHub account itself is not deleted." >&2
+  else
+    echo "git-account-picker: couldn't sign out of '$account'." >&2
+  fi
 }
 
 remember_account() {

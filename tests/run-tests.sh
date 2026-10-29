@@ -236,6 +236,51 @@ check "an already-remembered account is not announced again" "no" "$r"
 remember_working_account gist-like "" 2>/dev/null
 check "nothing is remembered without a username" "" "$(remembered_account gist-like)"
 
+# --- "Remove account..." ------------------------------------------------------
+
+check "nth_account picks by number" "work-account" "$(nth_account 2 personal-account work-account)"
+check "nth_account ignores numbers off the list" "" "$(nth_account 3 personal-account work-account)"
+check "nth_account ignores non-numbers" "" "$(nth_account x personal-account work-account)"
+
+# Scripted prompts: first remove work-account, then pick the last one listed.
+prompt_once() {
+  shift
+  if [ ! -e "$WORK_DIR/removed" ]; then
+    touch "$WORK_DIR/removed"
+    printf '__REMOVE__:work-account'
+  else
+    local last
+    for last; do :; done
+    printf '%s' "$last"
+  fi
+}
+set_accounts personal-account work-account
+remember_account my-company work-account
+rm -f "$WORK_DIR/removed"
+out="$(pick_account github.com personal-account work-account 2>/dev/null)"
+check "Remove account... signs it out and asks again without it" "personal-account" "$out"
+check "the removed account is gone from the list" "personal-account" "$(list_gh_accounts github.com | tr '\n' ' ' | sed 's/ $//')"
+check "owners remembered for the removed account are forgotten" "" "$(remembered_account my-company)"
+
+# Declining the removal (__AGAIN__) just shows the list again.
+prompt_once() {
+  shift
+  if [ ! -e "$WORK_DIR/declined" ]; then touch "$WORK_DIR/declined"; printf '__AGAIN__'; else printf '%s' "$1"; fi
+}
+set_accounts personal-account work-account
+out="$(pick_account github.com personal-account work-account 2>/dev/null)"
+check "declining the removal asks again and keeps both accounts" "personal-account|2" \
+  "$out|$(list_gh_accounts github.com | wc -l | tr -d ' ')"
+
+# Removing the last account stops with a message instead of an empty list.
+prompt_once() { printf '__REMOVE__:only-account'; }
+set_accounts only-account
+out="$(PICKER_ALWAYS_ASK=1 pick_account github.com only-account 2>"$WORK_DIR/err")"
+check "removing the last account picks nothing" "" "$out"
+grep -q "no GitHub accounts are signed in" "$WORK_DIR/err" && r=yes || r=no
+check "removing the last account says so" "yes" "$r"
+eval "$real_prompt_once"
+
 echo ""
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
