@@ -31,6 +31,15 @@ case "${1:-} ${2:-}" in
     grep -qx "$user" "$state" || { echo "not logged in to $user" >&2; exit 1; }
     { echo "$user"; grep -vx "$user" "$state"; } > "$state.new" && mv "$state.new" "$state"
     ;;
+  "auth logout")
+    user=""
+    while [ $# -gt 0 ]; do
+      case "$1" in --user) user="$2"; shift ;; esac
+      shift
+    done
+    grep -qx "$user" "$state" || { echo "not logged in to $user" >&2; exit 1; }
+    grep -vx "$user" "$state" > "$state.new"; mv "$state.new" "$state"
+    ;;
   "config get")
     # `gh config get -h github.com user` -> active account
     head -n 1 "$state"
