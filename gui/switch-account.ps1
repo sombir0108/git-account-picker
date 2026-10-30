@@ -1,10 +1,9 @@
 # Standalone account switcher launched by the "Switch GitHub Account"
 # desktop shortcut. Ensures the GitHub CLI is installed, ensures at least
 # one account is signed in (opening a browser flow if not), lists
-# gh-authenticated accounts, prompts via a WinForms popup (with an
-# "Add account..." button), then makes the chosen one active.
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+# gh-authenticated accounts, prompts via the popup in picker-ui.ps1 (with
+# Add account and Remove buttons), then makes the chosen one active.
+. (Join-Path $PSScriptRoot "picker-ui.ps1")
 
 # `workflow` scope up front: without it GitHub rejects pushes that touch
 # .github/workflows files, and gh does not request it by default.
@@ -28,95 +27,6 @@ function Invoke-BrowserLogin {
   ) -Wait
 }
 
-# Returns the chosen account name, "__ADD__" for "Add account...",
-# "__REMOVE__:<account>" once removing an account is confirmed, or $null.
-function Show-AccountPicker([string[]]$Accounts) {
-  $form = New-Object System.Windows.Forms.Form
-  $form.Text = "GitHub Account Picker"
-  $form.Width = 420
-  $form.Height = 220
-  $form.StartPosition = "CenterScreen"
-  $form.TopMost = $true
-  $form.FormBorderStyle = 'FixedDialog'
-  $form.MaximizeBox = $false
-  $form.MinimizeBox = $false
-  $iconPath = Join-Path $PSScriptRoot "icon.ico"
-  if (Test-Path $iconPath) { $form.Icon = New-Object System.Drawing.Icon $iconPath }
-
-  $label = New-Object System.Windows.Forms.Label
-  $label.Text = "Choose active GitHub account:"
-  $label.AutoSize = $true
-  $label.Top = 15
-  $label.Left = 15
-  $form.Controls.Add($label)
-
-  $listBox = New-Object System.Windows.Forms.ListBox
-  $listBox.Top = 40
-  $listBox.Left = 15
-  $listBox.Width = 375
-  $listBox.Height = 100
-  foreach ($a in $Accounts) { [void]$listBox.Items.Add($a) }
-  if ($listBox.Items.Count -gt 0) { $listBox.SelectedIndex = 0 }
-  $form.Controls.Add($listBox)
-
-  $addButton = New-Object System.Windows.Forms.Button
-  $addButton.Text = "Add account..."
-  $addButton.Top = 150
-  $addButton.Left = 15
-  $addButton.Width = 100
-  $addButton.DialogResult = [System.Windows.Forms.DialogResult]::Retry
-  $form.Controls.Add($addButton)
-
-  $removeButton = New-Object System.Windows.Forms.Button
-  $removeButton.Text = "Remove..."
-  $removeButton.Top = 150
-  $removeButton.Left = 121
-  $removeButton.Width = 80
-  $removeButton.DialogResult = [System.Windows.Forms.DialogResult]::Abort
-  $form.Controls.Add($removeButton)
-
-  $okButton = New-Object System.Windows.Forms.Button
-  $okButton.Text = "Switch"
-  $okButton.Top = 150
-  $okButton.Left = 234
-  $okButton.Width = 75
-  $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
-  $form.Controls.Add($okButton)
-  $form.AcceptButton = $okButton
-
-  # With every account removed, only "Add account..." and Cancel make sense.
-  if ($listBox.Items.Count -eq 0) {
-    $removeButton.Enabled = $false
-    $okButton.Enabled = $false
-  }
-
-  $cancelButton = New-Object System.Windows.Forms.Button
-  $cancelButton.Text = "Cancel"
-  $cancelButton.Top = 150
-  $cancelButton.Left = 315
-  $cancelButton.Width = 75
-  $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-  $form.Controls.Add($cancelButton)
-  $form.CancelButton = $cancelButton
-
-  # Loop so answering "No" to the remove confirmation goes back to the list.
-  while ($true) {
-    $result = $form.ShowDialog()
-    if ($result -eq [System.Windows.Forms.DialogResult]::Abort -and $listBox.SelectedItem) {
-      $target = [string]$listBox.SelectedItem
-      $confirm = [System.Windows.Forms.MessageBox]::Show(
-        "Sign out of `"$target`" on this computer?`n`nIt is removed from this list and git stops using it. Your GitHub account itself is not deleted, and you can add it back with Add account...",
-        "Remove account", 'YesNo', 'Warning', 'Button2')
-      if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) { return "__REMOVE__:$target" }
-      continue
-    }
-    if ($result -eq [System.Windows.Forms.DialogResult]::Retry) { return "__ADD__" }
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $listBox.SelectedItem) {
-      return [string]$listBox.SelectedItem
-    }
-    return $null
-  }
-}
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   $install = [System.Windows.Forms.MessageBox]::Show(
@@ -170,7 +80,7 @@ if ($accounts.Count -eq 0) {
 # away.
 $chosen = $null
 while ($true) {
-  $picked = Show-AccountPicker -Accounts $accounts
+  $picked = Show-AccountPicker -Accounts $accounts -HostName $hostName
   if ($picked -eq "__ADD__") {
     Invoke-BrowserLogin
     $accounts = Get-GhAccounts -HostName $hostName

@@ -80,3 +80,7 @@ jobs:
           }
           Write-Host "PowerShell $($PSVersionTable.PSVersion)"
           if ($failed) { exit 1 }
+
+      - name: Popup smoke test
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\picker-ui-smoke.ps1

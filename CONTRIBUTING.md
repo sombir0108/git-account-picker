@@ -54,5 +54,13 @@ On Windows, parse-check each `.ps1` you touched:
 $e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("gui\switch-account.ps1",[ref]$null,[ref]$e); $e
 ```
 
+The Windows popup lives in `gui/picker-ui.ps1` (shared by both Windows
+scripts). If you change it, run its smoke test, which builds it in both
+themes without showing it:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\picker-ui-smoke.ps1
+```
+
 By submitting a pull request you agree your contribution is licensed under
 the project's [MIT License](LICENSE).
