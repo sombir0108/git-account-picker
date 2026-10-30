@@ -281,6 +281,36 @@ grep -q "no GitHub accounts are signed in" "$WORK_DIR/err" && r=yes || r=no
 check "removing the last account says so" "yes" "$r"
 eval "$real_prompt_once"
 
+# --- browser sign-in ----------------------------------------------------------
+
+out_file="$WORK_DIR/gh-out"
+echo "! First copy your one-time code: WXYZ-9876" > "$out_file"
+check "reads the code from older gh output" "WXYZ-9876" "$(login_code_from "$out_file")"
+echo "! One-time code (ABCD-1234) copied to clipboard" > "$out_file"
+check "reads the code from newer gh output" "ABCD-1234" "$(login_code_from "$out_file")"
+
+# Without a terminal: gh runs without asking anything (the fake gh fails if
+# its input is a terminal), the page is opened, and the code is shown and
+# copied; the call returns once gh has finished signing in.
+real_show_login_code="$(declare -f show_login_code)"
+real_open_device_page="$(declare -f open_device_page)"
+real_copy_to_clipboard="$(declare -f copy_to_clipboard)"
+show_login_code() { echo "$1" > "$WORK_DIR/shown-code"; }
+open_device_page() { touch "$WORK_DIR/page-opened"; }
+copy_to_clipboard() { echo "$1" > "$WORK_DIR/copied-code"; }
+set_accounts personal-account
+rm -f "$WORK_DIR/shown-code" "$WORK_DIR/page-opened" "$WORK_DIR/copied-code"
+open_browser_login github.com 2>/dev/null
+check "sign-in shows gh's one-time code" "ABCD-1234" "$(cat "$WORK_DIR/shown-code" 2>/dev/null)"
+check "sign-in copies the code" "ABCD-1234" "$(cat "$WORK_DIR/copied-code" 2>/dev/null)"
+[ -e "$WORK_DIR/page-opened" ] && r=yes || r=no
+check "sign-in opens GitHub's sign-in page" "yes" "$r"
+check "sign-in waits for gh to finish (new account is there)" "personal-account new-account" \
+  "$(list_gh_accounts github.com | tr '\n' ' ' | sed 's/ $//')"
+eval "$real_show_login_code"
+eval "$real_open_device_page"
+eval "$real_copy_to_clipboard"
+
 # --- install.sh / uninstall.sh round trip -------------------------------------
 # Uses a throwaway HOME and git config. Skipped on Windows, where the
 # installer would touch the real desktop shortcut.

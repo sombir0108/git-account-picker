@@ -42,9 +42,14 @@ system's own dialogs, which don't have these.)
 
 **Adding another account:** every prompt has an **Add account...** entry —
 a button in the Windows popup, a list entry in the macOS/Linux popups, and
-`a` in the terminal menu. It runs the browser sign-in
-(`gh auth login --web --scopes workflow`), refreshes the list, and asks
-again so the new account can be picked straight away. The desktop shortcut
+`a` in the terminal menu. It opens GitHub's sign-in page
+(github.com/login/device) in your browser and shows a one-time code to
+enter there (in the terminal, or in a small window — already copied to
+your clipboard), then refreshes the list and asks again so the new account
+can be picked straight away. Under the hood it runs
+`gh auth login --web --scopes workflow` without letting gh ask questions:
+gh's own "Authenticate Git with your GitHub credentials?" would replace
+this tool's git setup if answered yes. The desktop shortcut
 always shows the list, even with a single account, so this stays
 reachable. Tip: if your browser is already signed in to GitHub as a
 different user, sign out or use a private window first, otherwise GitHub
