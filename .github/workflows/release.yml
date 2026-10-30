@@ -1,0 +1,62 @@
+# Attaches ready-to-install downloads to every published release, so
+# nobody has to clone the repo:
+#   git-account-picker.zip / .tar.gz  - the tool (installers, scripts, icon)
+#   get-git-account-picker.ps1 / .sh  - one-line installers for that release
+# Can also be run by hand for an existing release (Actions -> Release
+# downloads -> Run workflow, with the tag).
+name: Release downloads
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach downloads to, e.g. v1.4.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    name: Build and attach downloads
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # The default branch provides the packaging rules (.gitattributes) and
+      # the one-line installers; the package itself is built from $TAG, so
+      # this also works for releases made before those files existed.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        run: |
+          mkdir dist
+          # .gitattributes export-ignore leaves out tests, tools and CI files.
+          git archive --worktree-attributes --format=zip --prefix=git-account-picker/ -o dist/git-account-picker.zip "$TAG"
+          git archive --worktree-attributes --format=tar.gz --prefix=git-account-picker/ -o dist/git-account-picker.tar.gz "$TAG"
+          for f in get-git-account-picker.ps1 get-git-account-picker.sh; do
+            sed "s/__VERSION__/$TAG/" "release/$f" > "dist/$f"
+          done
+          unzip -l dist/git-account-picker.zip
+          grep -q "$TAG" dist/get-git-account-picker.ps1 dist/get-git-account-picker.sh
+
+      - name: Check the packages
+        run: |
+          mkdir check
+          tar -xzf dist/git-account-picker.tar.gz -C check
+          for f in install.sh install-windows.ps1 bin/git-credential-account-picker.sh gui/picker-ui.ps1 gui/icon.ico; do
+            test -f "check/git-account-picker/$f" || { echo "missing $f"; exit 1; }
+          done
+          test -x check/git-account-picker/install.sh
+          if grep -l $'\r' check/git-account-picker/*.sh check/git-account-picker/*/*.sh; then
+            echo "CRLF line endings in the files above"; exit 1
+          fi
+          bash -n dist/get-git-account-picker.sh
+
+      - name: Attach to the release
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
