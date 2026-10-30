@@ -104,16 +104,16 @@ PLIST
     lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
     [ -x "$lsregister" ] && "$lsregister" -f "$app" >/dev/null 2>&1 || true
 
+    # Desktop shortcut: a link to the app, so it shows the app's icon. It
+    # replaces the plain .command script earlier versions put there.
     desktop="$HOME/Desktop"
     mkdir -p "$desktop"
-    cat > "$desktop/Switch GitHub Account.command" <<CMD
-#!/usr/bin/env bash
-"$INSTALL_DIR/bin/git-switch-account.sh"
-CMD
-    chmod +x "$desktop/Switch GitHub Account.command"
+    rm -f "$desktop/Switch GitHub Account.command"
+    rm -rf "$desktop/Switch GitHub Account.app"
+    ln -s "$app" "$desktop/Switch GitHub Account.app"
     shortcut_msg="App created: $app
    (find it in Launchpad or Spotlight - search \"Switch GitHub\" - and drag it to the Dock to keep it there).
-   Desktop shortcut created: $desktop/Switch GitHub Account.command"
+   Desktop shortcut created: $desktop/Switch GitHub Account"
     ;;
   *)
     desktop="$HOME/Desktop"

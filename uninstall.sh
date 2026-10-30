@@ -34,6 +34,7 @@ case "$(uname -s 2>/dev/null)" in
     ;;
   Darwin*)
     rm -f "$HOME/Desktop/Switch GitHub Account.command"
+    rm -f "$HOME/Desktop/Switch GitHub Account.app"
     rm -rf "$HOME/Applications/Switch GitHub Account.app"
     ;;
   *) rm -f "$HOME/Desktop/switch-github-account.desktop" ;;

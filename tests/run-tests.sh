@@ -312,6 +312,8 @@ if [ "$(os_kind)" != "windows" ]; then
     check "macOS: the app can find Homebrew's gh" "yes" "$r"
     [ -s "$app/Contents/Resources/icon.icns" ] && r=yes || r=no
     check "macOS: the app has its icon" "yes" "$r"
+    [ -L "$fake_home/Desktop/Switch GitHub Account.app" ] && [ ! -e "$fake_home/Desktop/Switch GitHub Account.command" ] && r=yes || r=no
+    check "macOS: the Desktop shortcut links to the app (no plain script)" "yes" "$r"
   fi
 
   run_isolated bash "$inst/uninstall.sh"
