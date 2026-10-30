@@ -151,14 +151,14 @@ extract it, and run the installer for your OS from inside the folder:
 | OS | Run |
 |---|---|
 | Windows | `.\install-windows.ps1` (double-click, or "Run with PowerShell") |
-| macOS / Linux | `./install.sh` |
+| macOS / Linux | `bash install.sh` |
 
 Both do the same thing underneath — `install-windows.ps1` just locates the
 `bash.exe` that ships with Git for Windows and runs `install.sh` through
 it, so you don't need to open Git Bash manually first.
 
 Pass a different directory as an argument to install elsewhere, e.g.
-`./install.sh /opt/git-account-picker` or
+`bash install.sh /opt/git-account-picker` or
 `.\install-windows.ps1 -InstallDir D:\tools\git-account-picker`.
 
 Installs to `~/.git-account-picker` by default, points git's
@@ -195,7 +195,7 @@ however you installed:
 | OS | Run |
 |---|---|
 | Windows (PowerShell) | `& "$HOME\.git-account-picker\uninstall-windows.ps1"` |
-| macOS / Linux | `~/.git-account-picker/uninstall.sh` |
+| macOS / Linux | `bash ~/.git-account-picker/uninstall.sh` |
 
 Removes the credential helper and `useHttpPath` config it added, deletes
 the desktop shortcut, and deletes the installed copy. Remembered accounts
