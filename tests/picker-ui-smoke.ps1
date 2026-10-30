@@ -21,6 +21,9 @@ foreach ($theme in "light", "dark") {
 }
 $out = @(Show-AccountPicker -Accounts @() -BuildOnly)
 Check "builds with no accounts left" 0 $out.Count
+$out = @(Show-AccountPicker -Accounts "personal-account", "work-account" -ActiveAccount "work-account" -BuildOnly `
+    -OnSwitch { @{ Kind = "success"; Message = "ok" } } -OnAdd { @() } -OnRemove { @() })
+Check "builds the stay-open popup (desktop shortcut) without printing anything" 0 $out.Count
 
 $s = Get-PickerUiSettings
 Check "always on top is on by default" $true $s.TopMost

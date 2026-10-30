@@ -1,8 +1,8 @@
 # Standalone account switcher launched by the "Switch GitHub Account"
 # desktop shortcut. Ensures the GitHub CLI is installed, ensures at least
 # one account is signed in (opening a browser flow if not), lists
-# gh-authenticated accounts, prompts via the popup in picker-ui.ps1 (with
-# Add account and Remove buttons), then makes the chosen one active.
+# gh-authenticated accounts and shows the popup from picker-ui.ps1, which
+# switches, adds and removes accounts in place until it is closed.
 . (Join-Path $PSScriptRoot "picker-ui.ps1")
 
 # `workflow` scope up front: without it GitHub rejects pushes that touch
@@ -27,15 +27,13 @@ function Invoke-BrowserLogin {
   ) -Wait
 }
 
-
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-  $install = [System.Windows.Forms.MessageBox]::Show(
-    "GitHub CLI (gh) is required but was not found. Install it now?",
-    "git-account-picker", 'YesNo', 'Question')
-  if ($install -ne [System.Windows.Forms.DialogResult]::Yes) {
-    [System.Windows.Forms.MessageBox]::Show(
-      "GitHub CLI is required. Install manually from https://cli.github.com/",
-      "git-account-picker", 'OK', 'Warning') | Out-Null
+  $install = Show-PickerDialog -Kind "info" -Heading "GitHub CLI is needed" `
+    -Message "The picker uses the GitHub CLI (gh) to sign in and switch accounts, and it isn't installed. Install it now?" `
+    -Buttons "Not now", "Install"
+  if ($install -ne "Install") {
+    [void](Show-PickerDialog -Kind "warning" -Heading "GitHub CLI is needed" `
+        -Message "Install it from https://cli.github.com/ and open the picker again.")
     exit 1
   }
 
@@ -50,9 +48,8 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   }
 
   if (-not $installed -or -not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    [System.Windows.Forms.MessageBox]::Show(
-      "GitHub CLI installation failed or no supported package manager (winget/choco) was found. Install manually from https://cli.github.com/",
-      "git-account-picker", 'OK', 'Error') | Out-Null
+    [void](Show-PickerDialog -Kind "warning" -Heading "Couldn't install the GitHub CLI" `
+        -Message "Installing failed, or neither winget nor choco is available. Install it from https://cli.github.com/ and open the picker again.")
     exit 1
   }
 }
@@ -61,53 +58,43 @@ $hostName = "github.com"
 $accounts = Get-GhAccounts -HostName $hostName
 
 if ($accounts.Count -eq 0) {
-  [System.Windows.Forms.MessageBox]::Show(
-    "No GitHub account is configured yet. Click OK to sign in via your browser.",
-    "git-account-picker", 'OK', 'Information') | Out-Null
+  [void](Show-PickerDialog -Kind "info" -Heading "Sign in to GitHub" `
+      -Message "No GitHub account is set up on this computer yet. Press OK to sign in in your browser.")
   Invoke-BrowserLogin
   $accounts = Get-GhAccounts -HostName $hostName
 }
 
 if ($accounts.Count -eq 0) {
-  [System.Windows.Forms.MessageBox]::Show(
-    "Still no GitHub account configured. Finish signing in and try again.",
-    "git-account-picker", 'OK', 'Warning') | Out-Null
+  [void](Show-PickerDialog -Kind "warning" -Heading "Still no GitHub account" `
+      -Message "Finish signing in in the browser, then open the picker again.")
   exit 1
 }
 
-# Always show the list (even with one account) so "Add account..." is
-# reachable; loop so a freshly added or removed account shows up straight
-# away.
-$chosen = $null
-while ($true) {
-  $picked = Show-AccountPicker -Accounts $accounts -HostName $hostName
-  if ($picked -eq "__ADD__") {
+# The window stays open: switching, adding and removing happen in place and
+# it reports how each went, until the user closes it.
+$onSwitch = {
+  param($target)
+  & gh auth switch --hostname $hostName --user $target *> $null
+  if ($LASTEXITCODE -ne 0) {
+    return @{ Kind = "error"; Message = "Couldn't switch to $target. Try removing it and adding it again." }
+  }
+  & gh api user --hostname $hostName *> $null
+  if ($LASTEXITCODE -ne 0) {
     Invoke-BrowserLogin
-    $accounts = Get-GhAccounts -HostName $hostName
-    continue
+    return @{ Kind = "warning"; Message = "$target's sign-in had expired, so the browser sign-in was opened. Once that's done, git uses $target." }
   }
-  if ($picked -like "__REMOVE__:*") {
-    $target = $picked.Substring("__REMOVE__:".Length)
-    & gh auth logout --hostname $hostName --user $target *> $null
-    $accounts = Get-GhAccounts -HostName $hostName
-    continue
-  }
-  $chosen = $picked
-  break
+  return @{ Kind = "success"; Message = "Switched. git now uses $target." }
 }
-if (-not $chosen) { exit 0 }
-
-& gh auth switch --hostname $hostName --user $chosen | Out-Null
-
-& gh api user --hostname $hostName *> $null
-if ($LASTEXITCODE -ne 0) {
-  [System.Windows.Forms.MessageBox]::Show(
-    "Switched to `"$chosen`", but that account's credential is expired or revoked. Opening browser to sign in again...",
-    "GitHub Account Picker", 'OK', 'Warning') | Out-Null
+$onAdd = {
   Invoke-BrowserLogin
+  return Get-GhAccounts -HostName $hostName
 }
-else {
-  [System.Windows.Forms.MessageBox]::Show(
-    "Active GitHub account switched to `"$chosen`".",
-    "GitHub Account Picker", 'OK', 'Information') | Out-Null
+$onRemove = {
+  param($target)
+  & gh auth logout --hostname $hostName --user $target *> $null
+  return Get-GhAccounts -HostName $hostName
 }
+
+Show-AccountPicker -Accounts $accounts -HostName $hostName `
+  -Subtitle "Switch the account git uses for github.com" `
+  -OnSwitch $onSwitch -OnAdd $onAdd -OnRemove $onRemove
