@@ -128,15 +128,34 @@ It also self-bootstraps:
 
 ## Install
 
-Pick the entry point for your OS. Both do the same thing underneath —
-`install-windows.ps1` just locates the `bash.exe` that ships with Git for
-Windows and runs `install.sh` through it, so you don't need to open Git
-Bash manually first.
+No need to clone anything. Paste one line — it downloads the latest
+release, runs its installer, and cleans up after itself. Running it again
+later updates you to the newest release.
+
+**Windows** (in PowerShell):
+
+```powershell
+irm https://github.com/sombirverma/git-account-picker/releases/latest/download/get-git-account-picker.ps1 | iex
+```
+
+**macOS / Linux** (in Terminal):
+
+```bash
+curl -fsSL https://github.com/sombirverma/git-account-picker/releases/latest/download/get-git-account-picker.sh | bash
+```
+
+Prefer to look before you run? Download **`git-account-picker.zip`** (or
+`.tar.gz`) from the [latest release](https://github.com/sombirverma/git-account-picker/releases/latest),
+extract it, and run the installer for your OS from inside the folder:
 
 | OS | Run |
 |---|---|
 | Windows | `.\install-windows.ps1` (double-click, or "Run with PowerShell") |
 | macOS / Linux | `./install.sh` |
+
+Both do the same thing underneath — `install-windows.ps1` just locates the
+`bash.exe` that ships with Git for Windows and runs `install.sh` through
+it, so you don't need to open Git Bash manually first.
 
 Pass a different directory as an argument to install elsewhere, e.g.
 `./install.sh /opt/git-account-picker` or
@@ -170,10 +189,13 @@ It can also be run from a terminal directly:
 
 ## Uninstall
 
+The installer keeps the uninstallers in the install folder, so this works
+however you installed:
+
 | OS | Run |
 |---|---|
-| Windows | `.\uninstall-windows.ps1` |
-| macOS / Linux | `./uninstall.sh` |
+| Windows (PowerShell) | `& "$HOME\.git-account-picker\uninstall-windows.ps1"` |
+| macOS / Linux | `~/.git-account-picker/uninstall.sh` |
 
 Removes the credential helper and `useHttpPath` config it added, deletes
 the desktop shortcut, and deletes the installed copy. Remembered accounts

@@ -2,3 +2,9 @@
 # otherwise bash fails with ": command not found".
 *.sh text eol=lf
 tests/stubs/* text eol=lf
+
+# Left out of the release downloads (git archive): development-only files.
+.github export-ignore
+tests export-ignore
+tools export-ignore
+release export-ignore

@@ -31,7 +31,12 @@ cp "$SRC_DIR/gui/picker-ui.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/switch-account.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/create-desktop-shortcut.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/icon.ico" "$SRC_DIR/gui/icon.png" "$INSTALL_DIR/gui/"
-chmod +x "$INSTALL_DIR/bin/git-credential-account-picker.sh" "$INSTALL_DIR/bin/git-switch-account.sh"
+# Keep the uninstallers with the installed copy (people who used the
+# one-line install have no other copy), plus a marker so they know this
+# folder is an installed copy that is safe to delete.
+cp "$SRC_DIR/uninstall.sh" "$SRC_DIR/uninstall-windows.ps1" "$INSTALL_DIR/"
+echo "Installed by git-account-picker; removed by uninstall.sh." > "$INSTALL_DIR/.git-account-picker-install"
+chmod +x "$INSTALL_DIR/bin/git-credential-account-picker.sh" "$INSTALL_DIR/bin/git-switch-account.sh" "$INSTALL_DIR/uninstall.sh"
 
 for host in github.com gist.github.com; do
   git config --global --unset "credential.https://$host.username" 2>/dev/null || true
@@ -99,5 +104,6 @@ Done. $shortcut_msg
 3. Double-click the desktop shortcut any time to switch the active account
    manually, without waiting for a failure.
 
-To remove this setup later, run: ./uninstall.sh "$INSTALL_DIR"
+To remove this setup later, run: "$INSTALL_DIR/uninstall.sh"
+(on Windows you can also run uninstall-windows.ps1 from that folder)
 EOF

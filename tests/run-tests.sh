@@ -281,6 +281,42 @@ grep -q "no GitHub accounts are signed in" "$WORK_DIR/err" && r=yes || r=no
 check "removing the last account says so" "yes" "$r"
 eval "$real_prompt_once"
 
+# --- install.sh / uninstall.sh round trip -------------------------------------
+# Uses a throwaway HOME and git config. Skipped on Windows, where the
+# installer would touch the real desktop shortcut.
+
+if [ "$(os_kind)" != "windows" ]; then
+  fake_home="$WORK_DIR/home"
+  mkdir -p "$fake_home"
+  run_isolated() { HOME="$fake_home" GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 "$@" </dev/null >/dev/null 2>&1; }
+  inst="$fake_home/.git-account-picker"
+
+  run_isolated bash "$REPO_DIR/install.sh"
+  r=yes
+  for f in bin/git-credential-account-picker.sh lib/picker-common.sh gui/picker-ui.ps1 uninstall.sh uninstall-windows.ps1 .git-account-picker-install; do
+    [ -f "$inst/$f" ] || { r="no ($f missing)"; break; }
+  done
+  check "install.sh installs the tool, its uninstallers and the marker" "yes" "$r"
+  check "install.sh turns on useHttpPath" "true" \
+    "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get credential.https://github.com.useHttpPath)"
+
+  run_isolated bash "$inst/uninstall.sh"
+  [ -e "$inst" ] && r=yes || r=no
+  check "the installed uninstall.sh removes its own install folder" "no" "$r"
+  check "uninstall.sh removes the git settings" "" \
+    "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get-regexp '^credential\.https://github\.com\.' || true)"
+
+  # Run from a downloaded/cloned copy (no marker), it must never delete
+  # that copy, only the default install folder.
+  copy="$WORK_DIR/downloaded"
+  mkdir -p "$copy/bin" "$copy/gui"
+  cp "$REPO_DIR/uninstall.sh" "$copy/"
+  mkdir -p "$inst"
+  run_isolated bash "$copy/uninstall.sh"
+  { [ -d "$copy" ] && [ ! -e "$inst" ]; } && r=yes || r=no
+  check "uninstall.sh from a downloaded copy leaves that copy alone" "yes" "$r"
+fi
+
 echo ""
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
