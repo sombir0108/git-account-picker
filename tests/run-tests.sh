@@ -300,9 +300,29 @@ if [ "$(os_kind)" != "windows" ]; then
   check "install.sh turns on useHttpPath" "true" \
     "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get credential.https://github.com.useHttpPath)"
 
+  if [ "$(os_kind)" = "macos" ]; then
+    app="$fake_home/Applications/Switch GitHub Account.app"
+    check "macOS: the app's Info.plist is valid" "ok" \
+      "$(plutil -lint "$app/Contents/Info.plist" >/dev/null 2>&1 && echo ok || echo bad)"
+    [ -x "$app/Contents/MacOS/switch-github-account" ] && r=yes || r=no
+    check "macOS: the app has a runnable launcher" "yes" "$r"
+    grep -q "$inst/bin/git-switch-account.sh" "$app/Contents/MacOS/switch-github-account" && r=yes || r=no
+    check "macOS: the app launches the installed switcher" "yes" "$r"
+    grep -q "/opt/homebrew/bin" "$app/Contents/MacOS/switch-github-account" && r=yes || r=no
+    check "macOS: the app can find Homebrew's gh" "yes" "$r"
+    [ -s "$app/Contents/Resources/icon.icns" ] && r=yes || r=no
+    check "macOS: the app has its icon" "yes" "$r"
+    [ -L "$fake_home/Desktop/Switch GitHub Account.app" ] && [ ! -e "$fake_home/Desktop/Switch GitHub Account.command" ] && r=yes || r=no
+    check "macOS: the Desktop shortcut links to the app (no plain script)" "yes" "$r"
+  fi
+
   run_isolated bash "$inst/uninstall.sh"
   [ -e "$inst" ] && r=yes || r=no
   check "the installed uninstall.sh removes its own install folder" "no" "$r"
+  if [ "$(os_kind)" = "macos" ]; then
+    [ -e "$fake_home/Applications/Switch GitHub Account.app" ] && r=yes || r=no
+    check "macOS: uninstall.sh removes the app" "no" "$r"
+  fi
   check "uninstall.sh removes the git settings" "" \
     "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get-regexp '^credential\.https://github\.com\.' || true)"
 

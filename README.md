@@ -173,13 +173,17 @@ git command:
 
 - Windows: a `.lnk` on your Desktop that runs a WinForms popup directly
   (no Git Bash dependency for the double-click path).
-- macOS: a `Switch GitHub Account.command` file on your Desktop.
+- macOS: a **Switch GitHub Account** app in your `~/Applications` folder —
+  find it in **Launchpad** or **Spotlight** (⌘ Space, "Switch GitHub") and
+  drag it to the Dock to keep it handy — plus a shortcut to it on your
+  Desktop. (Newer macOS can hide Desktop items: System Settings → Desktop &
+  Dock → "Show Items".) Installing replaces the plain
+  `Switch GitHub Account.command` script that earlier versions put there.
 - Linux: a `switch-github-account.desktop` launcher on your Desktop.
 
-On Windows and Linux the shortcut gets the app's icon — two people (your
+The shortcuts and the macOS app use the tool's icon — two people (your
 accounts) with a green switch badge (`gui/icon.ico` / `gui/icon.png`,
-drawn by `tools/make-icon.ps1`). The macOS `.command` file keeps the
-standard Terminal icon.
+drawn by `tools/make-icon.ps1`).
 
 It can also be run from a terminal directly:
 
