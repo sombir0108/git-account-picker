@@ -28,10 +28,15 @@ Check "builds the stay-open popup (desktop shortcut) without printing anything" 
 $s = Get-PickerUiSettings
 Check "always on top is on by default" $true $s.TopMost
 Check "opacity is 100% by default" 100 $s.Opacity
-Save-PickerUiSettings @{ TopMost = $false; Opacity = 70 }
+Check "theme follows Windows (auto) by default" "auto" $s.Theme
+Save-PickerUiSettings @{ TopMost = $false; Opacity = 70; Theme = "dark" }
 $s = Get-PickerUiSettings
 Check "always on top setting is remembered" $false $s.TopMost
 Check "opacity setting is remembered" 70 $s.Opacity
+Check "theme setting is remembered" "dark" $s.Theme
+$env:GIT_ACCOUNT_PICKER_THEME = ""
+Check "a remembered dark theme is used" $true (Get-PickerTheme $s.Theme).Dark
+Check "light theme when chosen" $false (Get-PickerTheme "light").Dark
 Set-Content (Join-Path $env:GIT_ACCOUNT_PICKER_CONFIG_DIR "ui-settings") "opacity=5"
 Check "opacity below 40% is raised to 40%" 40 (Get-PickerUiSettings).Opacity
 

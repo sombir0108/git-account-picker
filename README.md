@@ -18,12 +18,13 @@ an account when:
 - you deliberately ask, via the **desktop shortcut** or by running
   `git-switch-account.sh` yourself.
 
-![The desktop-shortcut popup on Windows after switching: three accounts with coloured initials, the new active one marked "Active now", a green "Switched. git now uses personal-account." message, Add account, Remove, Close and Switch buttons, and an "Always on top" switch and opacity slider at the bottom](docs/images/windows-picker.png)
+![The desktop-shortcut popup on Windows after switching: a theme button (Auto) top right, three accounts with coloured initials, the new active one marked "Active now", a green "Switched. git now uses personal-account." message, Add account, Remove, Close and Switch buttons, and an "Always on top" switch and opacity slider at the bottom](docs/images/windows-picker.png)
 
-**The Windows popup** follows your Windows light/dark app theme (set
-`GIT_ACCOUNT_PICKER_THEME=light` or `dark` to force one) and marks the
-account git is using right now as **Active now**. Double-click an account
-to switch to it.
+**The Windows popup** marks the account git is using right now as
+**Active now**; double-click an account to switch to it. The **theme
+button** (top right) cycles **Auto → Light → Dark**: Auto follows your
+Windows light/dark app setting (or `GIT_ACCOUNT_PICKER_THEME=light|dark`
+if you set it), Light and Dark always use that look.
 
 Opened from the **desktop shortcut**, it **stays open**: switching, adding
 and removing happen in place, a message strip says how each went, and it
@@ -35,7 +36,7 @@ account" use the same look. At the bottom:
 - **Always on top** keeps the popup above other windows (on by default).
 - **Opacity** makes it see-through, from 40% to 100%.
 
-Both are remembered for next time in
+These and the theme are remembered for next time in
 `~/.config/git-account-picker/ui-settings`. (macOS and Linux use the
 system's own dialogs, which don't have these.)
 

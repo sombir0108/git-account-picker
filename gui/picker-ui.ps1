@@ -41,12 +41,13 @@ function Get-PickerConfigDir {
 }
 
 function Get-PickerUiSettings {
-  $settings = @{ TopMost = $true; Opacity = 100 }
+  $settings = @{ TopMost = $true; Opacity = 100; Theme = "auto" }
   $file = Join-Path (Get-PickerConfigDir) "ui-settings"
   if (Test-Path $file) {
     foreach ($line in Get-Content $file) {
       if ($line -match '^topmost=(true|false)$') { $settings.TopMost = ($Matches[1] -eq 'true') }
       if ($line -match '^opacity=(\d+)$') { $settings.Opacity = [Math]::Min(100, [Math]::Max(40, [int]$Matches[1])) }
+      if ($line -match '^theme=(auto|light|dark)$') { $settings.Theme = $Matches[1] }
     }
   }
   return $settings
@@ -58,7 +59,8 @@ function Save-PickerUiSettings($settings) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     Set-Content -Path (Join-Path $dir "ui-settings") -Value @(
       "topmost=$($settings.TopMost.ToString().ToLower())",
-      "opacity=$($settings.Opacity)"
+      "opacity=$($settings.Opacity)",
+      "theme=$($settings.Theme)"
     )
   }
   catch { }
@@ -66,7 +68,8 @@ function Save-PickerUiSettings($settings) {
 
 # --- Theme ---------------------------------------------------------------------
 
-# Follows the Windows app theme; GIT_ACCOUNT_PICKER_THEME=light|dark overrides.
+# "auto" follows GIT_ACCOUNT_PICKER_THEME=light|dark if set, otherwise the
+# Windows app theme. The popup's theme button picks auto, light or dark.
 function Test-WindowsDarkMode {
   if ($env:GIT_ACCOUNT_PICKER_THEME -eq "dark") { return $true }
   if ($env:GIT_ACCOUNT_PICKER_THEME -eq "light") { return $false }
@@ -77,9 +80,10 @@ function Test-WindowsDarkMode {
   catch { return $false }
 }
 
-function Get-PickerTheme {
+function Get-PickerTheme([string]$Mode = "auto") {
   $c = { param($hex) [System.Drawing.ColorTranslator]::FromHtml($hex) }
-  if (Test-WindowsDarkMode) {
+  $dark = switch ($Mode) { "dark" { $true } "light" { $false } default { Test-WindowsDarkMode } }
+  if ($dark) {
     return @{
       Dark = $true; Back = & $c "#0D1117"; Surface = & $c "#161B22"; Border = & $c "#30363D"
       Text = & $c "#E6EDF3"; Muted = & $c "#8D96A0"; Selected = & $c "#1C2D41"; SelectedEdge = & $c "#388BFD"
@@ -133,18 +137,32 @@ function New-PickerForm($t, [string]$title, [int]$width, [int]$height) {
   $form.KeyPreview = $true
   $iconPath = Join-Path $PSScriptRoot "icon.ico"
   if (Test-Path $iconPath) { $form.Icon = New-Object System.Drawing.Icon $iconPath }
-  $form.Add_HandleCreated({
-      param($s, $e)
-      # Dark title bar to match (Windows 10 20H1+ / 11), rounded corners on 11.
-      $on = [int]($s.BackColor.GetBrightness() -lt 0.5)
-      [void][PickerNative]::DwmSetWindowAttribute($s.Handle, 20, [ref]$on, 4)
-      $round = 2
-      [void][PickerNative]::DwmSetWindowAttribute($s.Handle, 33, [ref]$round, 4)
-    })
+  $form.Add_HandleCreated({ param($s, $e) Set-PickerTitleBar $s })
   return $form
 }
 
-function New-PickerButton($t, [string]$text, [string]$style, [int]$x, [int]$y, [int]$w) {
+# Dark title bar to match a dark form (Windows 10 20H1+ / 11), rounded
+# corners on 11. Re-run after the theme changes.
+function Set-PickerTitleBar($form) {
+  $on = [int]($form.BackColor.GetBrightness() -lt 0.5)
+  [void][PickerNative]::DwmSetWindowAttribute($form.Handle, 20, [ref]$on, 4)
+  $round = 2
+  [void][PickerNative]::DwmSetWindowAttribute($form.Handle, 33, [ref]$round, 4)
+}
+
+# Button colours by style: primary, danger, danger-outline or secondary.
+# The style is kept on the button so the theme can be re-applied later.
+function Set-PickerButtonStyle($btn, $t, [string]$style) {
+  $btn.AccessibleDescription = $style
+  switch ($style) {
+    "primary" { $btn.BackColor = $t.Primary; $btn.ForeColor = $t.PrimaryText; $btn.FlatAppearance.BorderColor = $t.Primary; $btn.Font = $PickerFontBold }
+    "danger" { $btn.BackColor = $t.DangerFill; $btn.ForeColor = [System.Drawing.Color]::White; $btn.FlatAppearance.BorderColor = $t.DangerFill; $btn.Font = $PickerFontBold }
+    "danger-outline" { $btn.BackColor = $t.Surface; $btn.ForeColor = $t.Danger; $btn.FlatAppearance.BorderColor = $t.Border }
+    default { $btn.BackColor = $t.Surface; $btn.ForeColor = $t.Text; $btn.FlatAppearance.BorderColor = $t.Border }
+  }
+}
+
+function New-PickerButton($t, [string]$text, [string]$style, [int]$x, [int]$y, [int]$w, [int]$h = 34) {
   $btn = New-Object System.Windows.Forms.Button
   $btn.Text = $text
   $btn.FlatStyle = 'Flat'
@@ -152,13 +170,8 @@ function New-PickerButton($t, [string]$text, [string]$style, [int]$x, [int]$y, [
   $btn.UseVisualStyleBackColor = $false
   $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
   $btn.Location = New-Object System.Drawing.Point (S $x), (S $y)
-  $btn.Size = New-Object System.Drawing.Size (S $w), (S 34)
-  switch ($style) {
-    "primary" { $btn.BackColor = $t.Primary; $btn.ForeColor = $t.PrimaryText; $btn.FlatAppearance.BorderColor = $t.Primary; $btn.Font = $PickerFontBold }
-    "danger" { $btn.BackColor = $t.DangerFill; $btn.ForeColor = [System.Drawing.Color]::White; $btn.FlatAppearance.BorderColor = $t.DangerFill; $btn.Font = $PickerFontBold }
-    "danger-outline" { $btn.BackColor = $t.Surface; $btn.ForeColor = $t.Danger; $btn.FlatAppearance.BorderColor = $t.Border }
-    default { $btn.BackColor = $t.Surface; $btn.ForeColor = $t.Text; $btn.FlatAppearance.BorderColor = $t.Border }
-  }
+  $btn.Size = New-Object System.Drawing.Size (S $w), (S $h)
+  Set-PickerButtonStyle $btn $t $style
   return $btn
 }
 
@@ -177,8 +190,8 @@ function Show-PickerDialog {
     [string]$Kind = "info",
     $Owner = $null
   )
-  $t = Get-PickerTheme
   $settings = Get-PickerUiSettings
+  $t = Get-PickerTheme $settings.Theme
   $form = New-PickerForm $t $Title 420 170
   $form.TopMost = $settings.TopMost
 
@@ -273,8 +286,8 @@ function Show-AccountPicker {
     $ActiveAccount = [string](& gh config get -h $HostName user 2>$null)
   }
   $stay = [bool]$OnSwitch
-  $t = Get-PickerTheme
   $settings = Get-PickerUiSettings
+  $t = Get-PickerTheme $settings.Theme
   $state = @{ Hover = -1; Active = $ActiveAccount; BannerKind = "info"; BannerText = "" }
 
   $form = New-PickerForm $t "GitHub Account Picker" 440 430
@@ -299,6 +312,22 @@ function Show-AccountPicker {
   $sub.AutoSize = $true
   $sub.Location = New-Object System.Drawing.Point (S 71), (S 42)
   $form.Controls.AddRange(@($logo, $title, $sub))
+
+  # Theme button, top right: Auto (follow Windows) -> Light -> Dark.
+  $themeLabels = @{ auto = "$([char]0x25D0)  Auto"; light = "$([char]0x2600)  Light"; dark = "$([char]0x263E)  Dark" }
+  $themeBtn = New-PickerButton $t $themeLabels[$settings.Theme] "secondary" 340 16 80 28
+  $themeBtn.Font = $PickerFontSmall
+  $themeBtn.TabStop = $false
+  $tips = New-Object System.Windows.Forms.ToolTip
+  $tips.SetToolTip($themeBtn, "Theme: Auto follows Windows. Click to switch between Auto, Light and Dark.")
+  $themeBtn.Add_Click({
+      $next = @{ auto = "light"; light = "dark"; dark = "auto" }[$settings.Theme]
+      $settings.Theme = $next
+      Save-PickerUiSettings $settings
+      $themeBtn.Text = $themeLabels[$next]
+      & $applyTheme
+    })
+  $form.Controls.Add($themeBtn)
 
   # Account list: one row per account with an initial "avatar".
   $list = New-Object System.Windows.Forms.ListBox
@@ -525,6 +554,29 @@ function Show-AccountPicker {
     & $layout
   }
   & $fill $Accounts
+
+  # Re-colour everything for the chosen theme. $t is updated in place, so
+  # the drawing code (list rows, message strip, switch, slider) picks up the
+  # new colours on its next repaint.
+  $applyTheme = {
+    $new = Get-PickerTheme $settings.Theme
+    foreach ($k in @($new.Keys)) { $t[$k] = $new[$k] }
+    $form.BackColor = $t.Back
+    $form.ForeColor = $t.Text
+    foreach ($c in $list, $banner, $toggle, $slider) { $c.BackColor = $t.Back }
+    $list.ForeColor = $t.Text
+    $sub.ForeColor = $t.Muted
+    $opLabel.ForeColor = $t.Muted
+    $divider.BackColor = $t.Border
+    foreach ($b in $add, $remove, $cancel, $ok, $themeBtn) { Set-PickerButtonStyle $b $t $b.AccessibleDescription }
+    $themeBtn.Font = $PickerFontSmall
+    if ($form.IsHandleCreated) {
+      Set-PickerTitleBar $form
+      # Nudge the window so Windows repaints the title bar in the new colour.
+      $form.Width += 1; $form.Width -= 1
+    }
+    $form.Invalidate($true)
+  }
 
   if ($stay) {
     if ($state.Active) { & $say "info" "git is using $($state.Active) right now. Pick an account and press Switch." }
