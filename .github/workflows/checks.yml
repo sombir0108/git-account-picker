@@ -65,6 +65,31 @@ jobs:
       - name: Tests
         run: /bin/bash tests/run-tests.sh
 
+      - name: Build the native picker window
+        run: |
+          swiftc --version
+          swiftc -O -parse-as-library gui/mac/AccountPicker.swift -o AccountPicker
+
+      - name: Render the picker window (screenshots)
+        run: |
+          mkdir -p screenshots
+          export GIT_ACCOUNT_PICKER_CONFIG_DIR="$RUNNER_TEMP/picker-config"
+          for theme in light dark; do
+            ./AccountPicker --render "screenshots/manage-$theme.png" --theme "$theme" --icon gui/icon.png \
+              --accounts personal-account,work-account,client-account --active work-account
+            ./AccountPicker --mode choose --render "screenshots/choose-$theme.png" --theme "$theme" --icon gui/icon.png \
+              --accounts personal-account,work-account --active personal-account
+          done
+          ls -la screenshots
+          for f in screenshots/*.png; do test -s "$f" || { echo "empty $f"; exit 1; }; done
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-picker-screenshots
+          path: screenshots/
+
   powershell:
     name: PowerShell scripts (Windows PowerShell 5.1)
     runs-on: windows-latest
