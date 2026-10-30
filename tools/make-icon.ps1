@@ -1,7 +1,8 @@
 # Draws the app icon (two people = your accounts, with a green "switch"
 # badge) and writes:
 #   gui/icon.ico  - Windows shortcut and popup icon (16 to 256 px)
-#   gui/icon.png  - 256 px, used by the Linux desktop launcher
+#   gui/icon.png  - 512 px, for the macOS app, the Linux desktop launcher
+#                  and the popup header
 #
 # Only needed when changing the icon; the generated files are committed.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-icon.ps1
@@ -111,7 +112,7 @@ $images = @()
 foreach ($s in $sizes) {
   $bmp = New-IconBitmap $s
   if ($s -ge 256) { $data = Get-PngBytes $bmp } else { $data = Get-DibBytes $bmp }
-  if ($s -eq 256) { $bmp.Save((Join-Path $gui "icon.png"), [System.Drawing.Imaging.ImageFormat]::Png) }
+
   $bmp.Dispose()
   $images += , @($s, $data)
 }
@@ -130,4 +131,7 @@ foreach ($img in $images) {
 foreach ($img in $images) { $w.Write([byte[]]$img[1]) }
 $w.Flush()
 [System.IO.File]::WriteAllBytes((Join-Path $gui "icon.ico"), $out.ToArray())
+$png = New-IconBitmap 512
+$png.Save((Join-Path $gui "icon.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+$png.Dispose()
 Write-Output "Wrote gui\icon.ico ($($sizes -join ', ') px) and gui\icon.png"

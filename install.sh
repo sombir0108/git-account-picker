@@ -59,6 +59,51 @@ case "$(uname -s 2>/dev/null)" in
     fi
     ;;
   Darwin*)
+    # A real app in ~/Applications, so it shows up in Launchpad, Spotlight
+    # and Finder and can be kept in the Dock.
+    app="$HOME/Applications/Switch GitHub Account.app"
+    rm -rf "$app"
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+    # Apps opened from Finder get a minimal PATH without Homebrew, where gh
+    # usually lives, so add the usual places first.
+    cat > "$app/Contents/MacOS/switch-github-account" <<APP
+#!/bin/bash
+export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
+exec /bin/bash "$INSTALL_DIR/bin/git-switch-account.sh"
+APP
+    chmod +x "$app/Contents/MacOS/switch-github-account"
+    cat > "$app/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Switch GitHub Account</string>
+  <key>CFBundleDisplayName</key><string>Switch GitHub Account</string>
+  <key>CFBundleIdentifier</key><string>io.github.sombirverma.git-account-picker</string>
+  <key>CFBundleExecutable</key><string>switch-github-account</string>
+  <key>CFBundleIconFile</key><string>icon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+</dict>
+</plist>
+PLIST
+    # App icon from gui/icon.png, with the tools built into macOS.
+    if command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1; then
+      iconset="$(mktemp -d)/icon.iconset"
+      mkdir -p "$iconset"
+      for size in 16 32 128 256; do
+        sips -z "$size" "$size" "$INSTALL_DIR/gui/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null 2>&1 || true
+        sips -z $((size * 2)) $((size * 2)) "$INSTALL_DIR/gui/icon.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null 2>&1 || true
+      done
+      iconutil -c icns "$iconset" -o "$app/Contents/Resources/icon.icns" 2>/dev/null || true
+      rm -rf "$(dirname "$iconset")"
+    fi
+    # Tell Finder/Launchpad about the (re)built app.
+    touch "$app"
+    lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    [ -x "$lsregister" ] && "$lsregister" -f "$app" >/dev/null 2>&1 || true
+
     desktop="$HOME/Desktop"
     mkdir -p "$desktop"
     cat > "$desktop/Switch GitHub Account.command" <<CMD
@@ -66,7 +111,9 @@ case "$(uname -s 2>/dev/null)" in
 "$INSTALL_DIR/bin/git-switch-account.sh"
 CMD
     chmod +x "$desktop/Switch GitHub Account.command"
-    shortcut_msg="Desktop shortcut created: $desktop/Switch GitHub Account.command"
+    shortcut_msg="App created: $app
+   (find it in Launchpad or Spotlight - search \"Switch GitHub\" - and drag it to the Dock to keep it there).
+   Desktop shortcut created: $desktop/Switch GitHub Account.command"
     ;;
   *)
     desktop="$HOME/Desktop"

@@ -32,10 +32,13 @@ case "$(uname -s 2>/dev/null)" in
       ' >/dev/null 2>&1 || true
     fi
     ;;
-  Darwin*) rm -f "$HOME/Desktop/Switch GitHub Account.command" ;;
+  Darwin*)
+    rm -f "$HOME/Desktop/Switch GitHub Account.command"
+    rm -rf "$HOME/Applications/Switch GitHub Account.app"
+    ;;
   *) rm -f "$HOME/Desktop/switch-github-account.desktop" ;;
 esac
 
 rm -rf "$INSTALL_DIR"
 
-echo "Uninstalled git-account-picker, reset the github.com/gist.github.com credential.helper overrides, and removed the desktop shortcut."
+echo "Uninstalled git-account-picker, reset the github.com/gist.github.com credential.helper overrides, and removed the desktop shortcut (and the macOS app)."
