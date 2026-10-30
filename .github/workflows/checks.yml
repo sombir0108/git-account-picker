@@ -46,6 +46,36 @@ jobs:
       - name: Tests
         run: bash tests/run-tests.sh
 
+      - name: Install GTK 4 and libadwaita for the Linux window
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 xvfb dbus-x11 >/dev/null
+
+      - name: Render the Linux picker window (screenshots)
+        env:
+          GSK_RENDERER: cairo
+        run: |
+          python3 -m py_compile gui/linux/account-picker.py
+          mkdir -p screenshots
+          export GIT_ACCOUNT_PICKER_CONFIG_DIR="$RUNNER_TEMP/picker-config"
+          run() { dbus-run-session -- xvfb-run -a -s "-screen 0 1280x1024x24" python3 gui/linux/account-picker.py "$@"; }
+          for theme in light dark; do
+            run --render "screenshots/manage-$theme.png" --theme "$theme" --icon gui/icon.png \
+              --accounts personal-account,work-account,client-account --active work-account
+            run --mode choose --render "screenshots/choose-$theme.png" --theme "$theme" --icon gui/icon.png \
+              --accounts personal-account,work-account --active personal-account
+            run --mode login --render "screenshots/login-$theme.png" --theme "$theme"
+          done
+          ls -la screenshots
+          for f in screenshots/*.png; do test -s "$f" || { echo "empty $f"; exit 1; }; done
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux-picker-screenshots
+          path: screenshots/
+
   macos:
     name: Shell scripts (macOS built-in bash 3.2)
     runs-on: macos-latest
