@@ -52,7 +52,6 @@ jobs:
           for f in install.sh install-windows.ps1 bin/git-credential-account-picker.sh gui/picker-ui.ps1 gui/icon.ico; do
             test -f "check/git-account-picker/$f" || { echo "missing $f"; exit 1; }
           done
-          test -x check/git-account-picker/install.sh
           if grep -l $'\r' check/git-account-picker/*.sh check/git-account-picker/*/*.sh; then
             echo "CRLF line endings in the files above"; exit 1
           fi

@@ -26,6 +26,13 @@ jobs:
             exit 1
           fi
 
+      - name: Scripts people run directly are executable
+        run: |
+          for f in install.sh uninstall.sh bin/*.sh release/*.sh tests/run-tests.sh; do
+            mode=$(git ls-files -s "$f" | cut -c1-6)
+            [ "$mode" = 100755 ] || { echo "$f is not executable (git update-index --chmod=+x $f)"; exit 1; }
+          done
+
       - name: Syntax check (bash -n)
         run: |
           for f in $(git ls-files '*.sh'); do
