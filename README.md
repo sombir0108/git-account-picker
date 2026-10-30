@@ -22,11 +22,14 @@ an account when:
 
 ![The same picker as a native macOS window: account list with coloured initials, an info message, Add account, Remove, Close and a green Switch button, and the "Always on top" switch and opacity slider](docs/images/mac-picker.png)
 
-**The picker window** (Windows and macOS) marks the account git is using
-right now as **Active now**; double-click an account to switch to it. The
-**theme button** (top right) cycles **Auto → Light → Dark**: Auto follows
-your system's light/dark setting (or `GIT_ACCOUNT_PICKER_THEME=light|dark`
-on Windows), Light and Dark always use that look.
+![The same picker as a native Linux (GNOME) window: theme button in the title bar, account list with coloured initials, an info message, Add account, Remove, Close and a green Switch button, and the opacity slider](docs/images/linux-picker.png)
+
+**The picker window** (Windows, macOS and Linux) marks the account git is
+using right now as **Active now**; double-click an account to switch to
+it. The **theme button** (top right) cycles **Auto → Light → Dark**: Auto
+follows your system's light/dark setting (or
+`GIT_ACCOUNT_PICKER_THEME=light|dark`), Light and Dark always use that
+look.
 
 On macOS the window is a native app the installer builds with the Swift
 compiler from the Xcode Command Line Tools (git on macOS already needs
@@ -34,7 +37,13 @@ them). Without them — or with `GIT_ACCOUNT_PICKER_NO_NATIVE=1` — it falls
 back to the standard macOS dialogs; run `xcode-select --install` and the
 installer again to get the window.
 
-Opened from the **desktop shortcut** (or the macOS app), it **stays open**: switching, adding
+On Linux the window uses GTK 4 and libadwaita for Python, preinstalled on
+recent GNOME desktops (Fedora; on Ubuntu/Debian
+`sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`, Fedora
+`sudo dnf install python3-gobject gtk4 libadwaita`). Without them it falls
+back to the standard `zenity`/`kdialog` dialogs.
+
+Opened from the **desktop shortcut** (or the macOS / Linux app), it **stays open**: switching, adding
 and removing happen in place, a message strip says how each went, and it
 closes only when you press **Close** (or the window's ×). When git itself
 asks (e.g. during a push from your IDE), it closes as soon as you choose,
@@ -42,12 +51,12 @@ because git is waiting for the answer. Confirmations such as "Remove
 account" use the same look. At the bottom:
 
 - **Always on top** keeps the popup above other windows (on by default).
+  Not available on Linux, where desktops don't let apps keep themselves
+  on top.
 - **Opacity** makes it see-through, from 40% to 100%.
 
 These and the theme are remembered for next time in
-`~/.config/git-account-picker/ui-settings`, shared by Windows and macOS.
-(Linux uses the system's own `zenity`/`kdialog` dialogs, which don't have
-these.)
+`~/.config/git-account-picker/ui-settings`, shared by all three systems.
 
 **Adding another account:** every prompt has an **Add account...** entry —
 a button in the Windows popup, a list entry in the macOS/Linux popups, and
@@ -113,7 +122,8 @@ The prompt itself, whichever triggers it:
 - **IDEs / GUI git clients** (VS Code, JetBrains, GitHub Desktop, etc. —
   anything that spawns git without a real terminal attached) -> a native
   popup instead: WinForms on Windows, the native window on macOS (or
-  `osascript` dialogs without it), `zenity`/`kdialog` on Linux. Setting
+  `osascript` dialogs without it), the native window on Linux (or
+  `zenity`/`kdialog` without it). Setting
   `GIT_TERMINAL_PROMPT=0` also forces the popup.
 
 The account list is read live from `gh auth status` — add or remove
@@ -193,7 +203,8 @@ git command:
   Desktop. (Newer macOS can hide Desktop items: System Settings → Desktop &
   Dock → "Show Items".) Installing replaces the plain
   `Switch GitHub Account.command` script that earlier versions put there.
-- Linux: a `switch-github-account.desktop` launcher on your Desktop.
+- Linux: **Switch GitHub Account** in your applications menu (search for
+  it), plus a launcher on your Desktop.
 
 The shortcuts and the macOS app use the tool's icon — two people (your
 accounts) with a green switch badge (`gui/icon.ico` / `gui/icon.png`,

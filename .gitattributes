@@ -1,6 +1,7 @@
 # Shell scripts must keep Unix line endings even on Windows checkouts,
 # otherwise bash fails with ": command not found".
 *.sh text eol=lf
+*.py text eol=lf
 tests/stubs/* text eol=lf
 
 # Left out of the release downloads (git archive): development-only files.
