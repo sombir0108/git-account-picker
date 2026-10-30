@@ -20,11 +20,44 @@ function Get-GhAccounts([string]$HostName) {
   return $accounts
 }
 
+# Browser sign-in. gh runs with its input redirected so it asks nothing:
+# its "Authenticate Git with your GitHub credentials?" question would, on
+# yes (the default), replace this tool's credential helper. It prints a
+# one-time code instead; we open the sign-in page and show the code until
+# the user is done, then wait for gh to finish.
 function Invoke-BrowserLogin {
-  # Spawned in its own console so gh can show its one-time code and wait.
-  Start-Process -FilePath "powershell.exe" -ArgumentList @(
-    "-NoProfile", "-Command", "gh $loginArgs"
-  ) -Wait
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("gap-login-" + [guid]::NewGuid())
+  New-Item -ItemType Directory -Path $tmp | Out-Null
+  $in = Join-Path $tmp "in"; $out = Join-Path $tmp "out"; $err = Join-Path $tmp "err"
+  Set-Content -Path $in -Value ""
+  try {
+    $p = Start-Process -FilePath "gh" -ArgumentList $loginArgs -NoNewWindow -PassThru `
+      -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err
+    $code = $null
+    for ($i = 0; $i -lt 40 -and -not $code; $i++) {
+      $text = (Get-Content $out, $err -Raw -ErrorAction SilentlyContinue) -join "`n"
+      # Newer gh: "One-time code (ABCD-1234) copied"; older: "one-time code: ABCD-1234".
+      if ($text -match 'code[^A-Z0-9]*([A-Z0-9]{4}-[A-Z0-9]{4})') { $code = $Matches[1]; break }
+      if ($p.HasExited) { break }
+      Start-Sleep -Milliseconds 500
+    }
+    if (-not $code) {
+      if (-not $p.HasExited) { $p.Kill() }
+      [void](Show-PickerDialog -Kind "warning" -Heading "Couldn't start the GitHub sign-in" `
+          -Message "The GitHub CLI didn't start a browser sign-in. Try again, or run 'gh auth login' in a terminal.")
+      return
+    }
+    try { Set-Clipboard -Value $code } catch { }
+    Start-Process "https://github.com/login/device"
+    [void](Show-PickerDialog -Title "Add GitHub account" -Kind "info" `
+        -Heading "Enter this code on GitHub:  $code" `
+        -Message "Your browser is opening GitHub's sign-in page (github.com/login/device). The code is already copied, so you can just paste it there. Sign in as the account you want to add, approve, then click Done." `
+        -Buttons "Done")
+    $p.WaitForExit()
+  }
+  finally {
+    Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+  }
 }
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {

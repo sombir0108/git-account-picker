@@ -31,6 +31,15 @@ case "${1:-} ${2:-}" in
     grep -qx "$user" "$state" || { echo "not logged in to $user" >&2; exit 1; }
     { echo "$user"; grep -vx "$user" "$state"; } > "$state.new" && mv "$state.new" "$state"
     ;;
+  "auth login")
+    # Real gh asks "Authenticate Git with your GitHub credentials?" when its
+    # input is a terminal; the picker must never let it.
+    if [ -t 0 ]; then echo "fake gh: would have prompted" >&2; exit 1; fi
+    echo "! One-time code (ABCD-1234) copied to clipboard" >&2
+    echo "Open this URL to continue in your web browser: https://github.com/login/device" >&2
+    sleep 1
+    echo "new-account" >> "$state"
+    ;;
   "auth logout")
     user=""
     while [ $# -gt 0 ]; do

@@ -297,36 +297,112 @@ ensure_gh_installed() {
   return 1
 }
 
+# GitHub's device sign-in page, where gh's one-time code is entered.
+PICKER_DEVICE_URL="https://github.com/login/device"
+
+open_device_page() {
+  case "$(os_kind)" in
+    macos) open "$PICKER_DEVICE_URL" >/dev/null 2>&1 || true ;;
+    windows) powershell.exe -NoProfile -Command "Start-Process '$PICKER_DEVICE_URL'" >/dev/null 2>&1 || true ;;
+    linux) { xdg-open "$PICKER_DEVICE_URL" >/dev/null 2>&1 & } ;;
+  esac
+}
+
+copy_to_clipboard() {
+  case "$(os_kind)" in
+    macos) printf '%s' "$1" | pbcopy 2>/dev/null || true ;;
+    windows) printf '%s' "$1" | clip.exe 2>/dev/null || true ;;
+    linux)
+      if command -v wl-copy >/dev/null 2>&1; then printf '%s' "$1" | wl-copy 2>/dev/null || true
+      elif command -v xclip >/dev/null 2>&1; then printf '%s' "$1" | xclip -selection clipboard 2>/dev/null || true
+      elif command -v xsel >/dev/null 2>&1; then printf '%s' "$1" | xsel -b 2>/dev/null || true
+      fi
+      ;;
+  esac
+}
+
+# Shows the one-time code in a dialog and waits until the user clicks Done.
+show_login_code() {
+  local code="$1"
+  local msg="Your browser is opening GitHub's sign-in page ($PICKER_DEVICE_URL).
+
+Enter this code there:  $code
+(It's already copied, so you can just paste it.)
+
+Sign in as the account you want to add, approve, then click Done."
+  case "$(os_kind)" in
+    macos)
+      osascript -e 'on run argv' \
+        -e 'display dialog (item 1 of argv) with title "Add GitHub account" buttons {"Done"} default button "Done"' \
+        -e 'end run' "$msg" >/dev/null 2>&1 || true
+      ;;
+    windows)
+      local ps_path
+      ps_path="$(cygpath -w "$PICKER_GUI_DIR/login-code.ps1" 2>/dev/null || echo "$PICKER_GUI_DIR/login-code.ps1")"
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps_path" -Code "$code" >/dev/null 2>&1 || true
+      ;;
+    linux)
+      if command -v zenity >/dev/null 2>&1; then
+        zenity --info --title="Add GitHub account" --text="$msg" 2>/dev/null || true
+      elif command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "Add GitHub account" --msgbox "$msg" 2>/dev/null || true
+      fi
+      ;;
+  esac
+}
+
+# Prints the one-time code from gh's sign-in output (file $1). Newer gh
+# prints "One-time code (ABCD-1234) copied to clipboard", older "First copy
+# your one-time code: ABCD-1234".
+login_code_from() {
+  sed -nE 's/.*code[^A-Z0-9]*([A-Z0-9]{4}-[A-Z0-9]{4}).*/\1/p' "$1" 2>/dev/null | head -n 1
+}
+
+# Browser sign-in for a new (or expired) account.
+#
+# gh always runs with its input not on a terminal, so it asks nothing:
+# its "Authenticate Git with your GitHub credentials?" question would, on
+# yes (the default), replace this tool's credential helper, and its
+# prompts break in macOS Terminal ("unexpected escape sequence from
+# terminal"). Instead gh prints a one-time code and waits; this opens the
+# page to enter it on and shows the code (in the terminal, or in a dialog
+# when there is none) until the sign-in finishes.
 open_browser_login() {
   local host="$1"
   # `workflow` scope up front: without it GitHub rejects pushes that touch
   # .github/workflows files, and gh does not request it by default.
-  local login_cmd="gh auth login --hostname $host --git-protocol https --web --scopes workflow"
+  local args=(auth login --hostname "$host" --git-protocol https --web --scopes workflow)
 
   if in_terminal; then
-    eval "$login_cmd" < /dev/tty > /dev/tty 2>&1 || true
+    echo "Opening GitHub's sign-in page in your browser. Enter the one-time code shown below there, then approve." >/dev/tty
+    open_device_page
+    gh "${args[@]}" </dev/null >/dev/tty 2>&1 || true
     return
   fi
 
-  case "$(os_kind)" in
-    windows)
-      command -v powershell.exe >/dev/null 2>&1 || return
-      powershell.exe -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-Command','$login_cmd' -Wait" >/dev/null 2>&1 || true
-      ;;
-    macos)
-      osascript -e "tell application \"Terminal\" to do script \"$login_cmd\"" >/dev/null 2>&1 || true
-      ;;
-    linux)
-      local term
-      for term in x-terminal-emulator gnome-terminal konsole xterm; do
-        if command -v "$term" >/dev/null 2>&1; then
-          "$term" -e "bash -c '$login_cmd; read -p \"Press Enter to close\"'" >/dev/null 2>&1 &
-          wait $! 2>/dev/null || true
-          break
-        fi
-      done
-      ;;
-  esac
+  local log pid code="" i=0
+  log="$(mktemp)"
+  gh "${args[@]}" </dev/null >"$log" 2>&1 &
+  pid=$!
+  while [ "$i" -lt 40 ]; do
+    code="$(login_code_from "$log")"
+    [ -n "$code" ] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+    i=$((i + 1))
+  done
+
+  if [ -n "$code" ]; then
+    copy_to_clipboard "$code"
+    open_device_page
+    show_login_code "$code"
+  else
+    kill "$pid" 2>/dev/null || true
+    echo "git-account-picker: couldn't start the GitHub sign-in:" >&2
+    cat "$log" >&2
+  fi
+  wait "$pid" 2>/dev/null || true
+  rm -f "$log"
 }
 
 # Ensures at least one gh-authenticated account exists for $host, opening a
