@@ -340,7 +340,7 @@ class PickerApp(Adw.Application):
 
         footer = hbox(8)
         top_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
-        top_switch.set_active(self.settings.top_most)
+        top_switch.set_active(False)
         # GTK 4 can't keep a window above others (Wayland doesn't allow it).
         top_switch.set_sensitive(False)
         top_label = label("Always on top", "dim-label")
@@ -658,7 +658,7 @@ class PickerApp(Adw.Application):
         body.append(key)
         body.append(label("Enter this code on GitHub", "title-4", xalign=0.5))
         self.code_label = label("…", "code", xalign=0.5)
-        self.code_label.set_selectable(True)
+
         body.append(self.code_label)
         body.append(label("It's copied to your clipboard, and your browser opened github.com/login/device. "
                           "Paste the code there, sign in as the account you want to add, and approve. "

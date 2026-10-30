@@ -141,6 +141,16 @@ prompt_gui_macos() {
   fi
 }
 
+# The native Linux window (GTK 4 + libadwaita for Python). It exits with
+# status 3 when those aren't installed; zenity/kdialog are used then.
+PICKER_LINUX_UI="$PICKER_GUI_DIR/linux/account-picker.py"
+
+# True when the native Linux window can be tried (it may still exit 3).
+linux_ui_available() {
+  { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; } \
+    && command -v python3 >/dev/null 2>&1 && [ -f "$PICKER_LINUX_UI" ]
+}
+
 prompt_gui_linux() {
   local host="$1"; shift
   local accounts=("$@")
@@ -148,7 +158,19 @@ prompt_gui_linux() {
   if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     printf '__NONE__'
     return
-  elif command -v zenity >/dev/null 2>&1; then
+  fi
+  if linux_ui_available; then
+    # Adding and removing happen inside the window; it prints the chosen
+    # account, or nothing when cancelled.
+    local joined out
+    joined=$(IFS=,; echo "${accounts[*]}")
+    if out="$(python3 "$PICKER_LINUX_UI" --mode choose --host "$host" --accounts "$joined" \
+        --active "$(gh config get -h "$host" user 2>/dev/null)" --icon "$PICKER_GUI_DIR/icon.png" 2>/dev/null)"; then
+      printf '%s' "$out"
+      return
+    fi
+  fi
+  if command -v zenity >/dev/null 2>&1; then
     tool=zenity
     sel="$(zenity --list --title="GitHub Account Picker" \
       --text="Choose GitHub account for $host:" \
@@ -378,6 +400,11 @@ open_browser_login() {
     open_device_page
     gh "${args[@]}" </dev/null >/dev/tty 2>&1 || true
     return
+  fi
+
+  # Linux: the native window runs the sign-in and shows the code itself.
+  if [ "$(os_kind)" = "linux" ] && linux_ui_available; then
+    python3 "$PICKER_LINUX_UI" --mode login --host "$host" >/dev/null 2>&1 && return
   fi
 
   local log pid code="" i=0

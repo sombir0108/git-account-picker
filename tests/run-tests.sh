@@ -318,7 +318,7 @@ eval "$real_copy_to_clipboard"
 if [ "$(os_kind)" != "windows" ]; then
   fake_home="$WORK_DIR/home"
   mkdir -p "$fake_home"
-  run_isolated() { HOME="$fake_home" GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 "$@" </dev/null >/dev/null 2>&1; }
+  run_isolated() { env -u XDG_DATA_HOME -u XDG_CONFIG_HOME HOME="$fake_home" GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 "$@" </dev/null >/dev/null 2>&1; }
   inst="$fake_home/.git-account-picker"
 
   run_isolated bash "$REPO_DIR/install.sh"
@@ -329,6 +329,16 @@ if [ "$(os_kind)" != "windows" ]; then
   check "install.sh installs the tool, its uninstallers and the marker" "yes" "$r"
   check "install.sh turns on useHttpPath" "true" \
     "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get credential.https://github.com.useHttpPath)"
+
+  if [ "$(os_kind)" = "linux" ]; then
+    menu="$fake_home/.local/share/applications/switch-github-account.desktop"
+    [ -f "$menu" ] && [ -f "$fake_home/Desktop/switch-github-account.desktop" ] && r=yes || r=no
+    check "Linux: the app is in the applications menu and on the Desktop" "yes" "$r"
+    grep -q "^Exec=bash \"$inst/bin/git-switch-account.sh\"$" "$menu" && grep -q "^Icon=$inst/gui/icon.png$" "$menu" && r=yes || r=no
+    check "Linux: the menu entry runs the installed switcher with the icon" "yes" "$r"
+    [ -f "$inst/gui/linux/account-picker.py" ] && r=yes || r=no
+    check "Linux: the picker window is installed" "yes" "$r"
+  fi
 
   if [ "$(os_kind)" = "macos" ]; then
     app="$fake_home/Applications/Switch GitHub Account.app"
@@ -349,6 +359,10 @@ if [ "$(os_kind)" != "windows" ]; then
   run_isolated bash "$inst/uninstall.sh"
   [ -e "$inst" ] && r=yes || r=no
   check "the installed uninstall.sh removes its own install folder" "no" "$r"
+  if [ "$(os_kind)" = "linux" ]; then
+    [ -e "$fake_home/.local/share/applications/switch-github-account.desktop" ] && r=yes || r=no
+    check "Linux: uninstall.sh removes the menu entry" "no" "$r"
+  fi
   if [ "$(os_kind)" = "macos" ]; then
     [ -e "$fake_home/Applications/Switch GitHub Account.app" ] && r=yes || r=no
     check "macOS: uninstall.sh removes the app" "no" "$r"

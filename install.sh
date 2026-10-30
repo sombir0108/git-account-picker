@@ -29,6 +29,8 @@ cp "$SRC_DIR/lib/picker-common.sh" "$INSTALL_DIR/lib/"
 cp "$SRC_DIR/gui/picker-gui.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/picker-ui.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/login-code.ps1" "$INSTALL_DIR/gui/"
+mkdir -p "$INSTALL_DIR/gui/linux"
+cp "$SRC_DIR/gui/linux/account-picker.py" "$INSTALL_DIR/gui/linux/"
 cp "$SRC_DIR/gui/switch-account.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/create-desktop-shortcut.ps1" "$INSTALL_DIR/gui/"
 cp "$SRC_DIR/gui/icon.ico" "$SRC_DIR/gui/icon.png" "$INSTALL_DIR/gui/"
@@ -117,20 +119,34 @@ PLIST
    Desktop shortcut created: $desktop/Switch GitHub Account"
     ;;
   *)
-    desktop="$HOME/Desktop"
-    mkdir -p "$desktop"
-    cat > "$desktop/switch-github-account.desktop" <<DESK
-[Desktop Entry]
+    # The picker window (gui/linux/account-picker.py) needs GTK 4 and
+    # libadwaita for Python; without them the standard dialogs are used.
+    if ! python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")' >/dev/null 2>&1; then
+      echo "For the full picker window, install GTK 4 for Python (otherwise the standard dialogs are used):"
+      echo "  Ubuntu/Debian: sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1"
+      echo "  Fedora:        sudo dnf install python3-gobject gtk4 libadwaita"
+    fi
+    entry="[Desktop Entry]
 Type=Application
 Name=Switch GitHub Account
 Comment=Switch the active GitHub CLI/git account
-Exec=bash "$INSTALL_DIR/bin/git-switch-account.sh"
+Exec=bash \"$INSTALL_DIR/bin/git-switch-account.sh\"
 Icon=$INSTALL_DIR/gui/icon.png
 Terminal=false
-Categories=Utility;
-DESK
-    chmod +x "$desktop/switch-github-account.desktop"
-    shortcut_msg="Desktop shortcut created: $desktop/switch-github-account.desktop"
+Categories=Utility;Development;
+StartupWMClass=io.github.sombirverma.GitAccountPicker"
+    # In the applications menu / search, and on the Desktop.
+    apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    desktop="$HOME/Desktop"
+    mkdir -p "$apps" "$desktop"
+    for f in "$apps/switch-github-account.desktop" "$desktop/switch-github-account.desktop"; do
+      printf '%s\n' "$entry" > "$f"
+      chmod +x "$f"
+    done
+    # GNOME only launches Desktop files marked as trusted.
+    gio set "$desktop/switch-github-account.desktop" metadata::trusted true >/dev/null 2>&1 || true
+    shortcut_msg="App created: find \"Switch GitHub Account\" in your applications menu.
+   Desktop shortcut created: $desktop/switch-github-account.desktop"
     ;;
 esac
 
