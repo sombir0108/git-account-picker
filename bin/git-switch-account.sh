@@ -50,6 +50,13 @@ USAGE
     ;;
 esac
 
+# Linux desktop launcher (no terminal): the native window switches, adds and
+# removes accounts itself. Falls through to the dialogs below if it can't
+# run (e.g. GTK 4 for Python isn't installed).
+if [ "$(os_kind)" = "linux" ] && ! in_terminal && linux_ui_available; then
+  python3 "$PICKER_LINUX_UI" --mode manage --icon "$PICKER_GUI_DIR/icon.png" && exit 0
+fi
+
 if ! ensure_gh_installed; then
   exit 1
 fi
