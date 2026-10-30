@@ -20,13 +20,21 @@ an account when:
 
 ![The desktop-shortcut popup on Windows after switching: a theme button (Auto) top right, three accounts with coloured initials, the new active one marked "Active now", a green "Switched. git now uses personal-account." message, Add account, Remove, Close and Switch buttons, and an "Always on top" switch and opacity slider at the bottom](docs/images/windows-picker.png)
 
-**The Windows popup** marks the account git is using right now as
-**Active now**; double-click an account to switch to it. The **theme
-button** (top right) cycles **Auto → Light → Dark**: Auto follows your
-Windows light/dark app setting (or `GIT_ACCOUNT_PICKER_THEME=light|dark`
-if you set it), Light and Dark always use that look.
+![The same picker as a native macOS window: account list with coloured initials, an info message, Add account, Remove, Close and a green Switch button, and the "Always on top" switch and opacity slider](docs/images/mac-picker.png)
 
-Opened from the **desktop shortcut**, it **stays open**: switching, adding
+**The picker window** (Windows and macOS) marks the account git is using
+right now as **Active now**; double-click an account to switch to it. The
+**theme button** (top right) cycles **Auto → Light → Dark**: Auto follows
+your system's light/dark setting (or `GIT_ACCOUNT_PICKER_THEME=light|dark`
+on Windows), Light and Dark always use that look.
+
+On macOS the window is a native app the installer builds with the Swift
+compiler from the Xcode Command Line Tools (git on macOS already needs
+them). Without them — or with `GIT_ACCOUNT_PICKER_NO_NATIVE=1` — it falls
+back to the standard macOS dialogs; run `xcode-select --install` and the
+installer again to get the window.
+
+Opened from the **desktop shortcut** (or the macOS app), it **stays open**: switching, adding
 and removing happen in place, a message strip says how each went, and it
 closes only when you press **Close** (or the window's ×). When git itself
 asks (e.g. during a push from your IDE), it closes as soon as you choose,
@@ -37,8 +45,9 @@ account" use the same look. At the bottom:
 - **Opacity** makes it see-through, from 40% to 100%.
 
 These and the theme are remembered for next time in
-`~/.config/git-account-picker/ui-settings`. (macOS and Linux use the
-system's own dialogs, which don't have these.)
+`~/.config/git-account-picker/ui-settings`, shared by Windows and macOS.
+(Linux uses the system's own `zenity`/`kdialog` dialogs, which don't have
+these.)
 
 **Adding another account:** every prompt has an **Add account...** entry —
 a button in the Windows popup, a list entry in the macOS/Linux popups, and
@@ -103,9 +112,9 @@ The prompt itself, whichever triggers it:
   that terminal.
 - **IDEs / GUI git clients** (VS Code, JetBrains, GitHub Desktop, etc. —
   anything that spawns git without a real terminal attached) -> a native
-  popup instead: WinForms on Windows, `osascript` on macOS, `zenity`/
-  `kdialog` on Linux. Setting `GIT_TERMINAL_PROMPT=0` also forces the
-  popup.
+  popup instead: WinForms on Windows, the native window on macOS (or
+  `osascript` dialogs without it), `zenity`/`kdialog` on Linux. Setting
+  `GIT_TERMINAL_PROMPT=0` also forces the popup.
 
 The account list is read live from `gh auth status` — add or remove
 accounts with `gh auth login` / `gh auth logout` and the picker picks it up

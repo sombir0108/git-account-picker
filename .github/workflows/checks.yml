@@ -79,13 +79,14 @@ jobs:
               --accounts personal-account,work-account,client-account --active work-account
             ./AccountPicker --mode choose --render "screenshots/choose-$theme.png" --theme "$theme" --icon gui/icon.png \
               --accounts personal-account,work-account --active personal-account
+            ./AccountPicker --mode login --render "screenshots/login-$theme.png" --theme "$theme" --icon gui/icon.png
           done
           ls -la screenshots
           for f in screenshots/*.png; do test -s "$f" || { echo "empty $f"; exit 1; }; done
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mac-picker-screenshots
           path: screenshots/

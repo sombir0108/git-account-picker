@@ -659,6 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     if let path = opts.render {
       store.welcome()
+      if opts.mode == "login" { store.loginCode = LoginCode(code: "ABCD-1234") }
       fit()
       // Active window, so buttons and switches show their real colours.
       NSApp.setActivationPolicy(.regular)
