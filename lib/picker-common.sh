@@ -117,9 +117,24 @@ applescript_list() {
   printf '{%s}' "$list"
 }
 
+# The native macOS window (gui/mac/AccountPicker.swift), which install.sh
+# builds into the app. Without it the plain osascript dialogs are used.
+PICKER_MAC_BIN="${GIT_ACCOUNT_PICKER_MAC_BIN:-$HOME/Applications/Switch GitHub Account.app/Contents/MacOS/AccountPicker}"
+
 prompt_gui_macos() {
   local host="$1"; shift
   local accounts=("$@")
+  if [ -x "$PICKER_MAC_BIN" ]; then
+    # Adding and removing happen inside the window; it prints the chosen
+    # account, or nothing when cancelled.
+    local joined out
+    joined=$(IFS=,; echo "${accounts[*]}")
+    if out="$("$PICKER_MAC_BIN" --mode choose --host "$host" --accounts "$joined" \
+        --active "$(gh config get -h "$host" user 2>/dev/null)" 2>/dev/null)"; then
+      printf '%s' "$out"
+      return
+    fi
+  fi
   local result
   # Cancel makes `choose from list` print "false"; osascript itself failing
   # (e.g. no GUI session over SSH) means no popup could be shown.
@@ -378,6 +393,11 @@ open_browser_login() {
     open_device_page
     gh "${args[@]}" </dev/null >/dev/tty 2>&1 || true
     return
+  fi
+
+  # macOS: the native window runs the sign-in and shows the code itself.
+  if [ "$(os_kind)" = "macos" ] && [ -x "$PICKER_MAC_BIN" ]; then
+    "$PICKER_MAC_BIN" --mode login --host "$host" >/dev/null 2>&1 && return
   fi
 
   local log pid code="" i=0

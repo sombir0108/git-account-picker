@@ -334,12 +334,14 @@ if [ "$(os_kind)" != "windows" ]; then
     app="$fake_home/Applications/Switch GitHub Account.app"
     check "macOS: the app's Info.plist is valid" "ok" \
       "$(plutil -lint "$app/Contents/Info.plist" >/dev/null 2>&1 && echo ok || echo bad)"
-    [ -x "$app/Contents/MacOS/switch-github-account" ] && r=yes || r=no
-    check "macOS: the app has a runnable launcher" "yes" "$r"
-    grep -q "$inst/bin/git-switch-account.sh" "$app/Contents/MacOS/switch-github-account" && r=yes || r=no
-    check "macOS: the app launches the installed switcher" "yes" "$r"
-    grep -q "/opt/homebrew/bin" "$app/Contents/MacOS/switch-github-account" && r=yes || r=no
-    check "macOS: the app can find Homebrew's gh" "yes" "$r"
+    # With the Xcode Command Line Tools (as on the CI machine) the app's
+    # executable is the native window.
+    exe="$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist" 2>/dev/null)"
+    check "macOS: the app runs the native window" "AccountPicker" "$exe"
+    [ -x "$app/Contents/MacOS/$exe" ] && r=yes || r=no
+    check "macOS: the app's executable is runnable" "yes" "$r"
+    check "macOS: the native window needs macOS 12" "12.0" \
+      "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist" 2>/dev/null)"
     [ -s "$app/Contents/Resources/icon.icns" ] && r=yes || r=no
     check "macOS: the app has its icon" "yes" "$r"
     [ -L "$fake_home/Desktop/Switch GitHub Account.app" ] && [ ! -e "$fake_home/Desktop/Switch GitHub Account.command" ] && r=yes || r=no
@@ -352,6 +354,16 @@ if [ "$(os_kind)" != "windows" ]; then
   if [ "$(os_kind)" = "macos" ]; then
     [ -e "$fake_home/Applications/Switch GitHub Account.app" ] && r=yes || r=no
     check "macOS: uninstall.sh removes the app" "no" "$r"
+
+    # Without the native window: the app runs the switcher script, with
+    # Homebrew's folders on PATH so gh is found when opened from Finder.
+    GIT_ACCOUNT_PICKER_NO_NATIVE=1 run_isolated bash "$REPO_DIR/install.sh"
+    launcher="$app/Contents/MacOS/switch-github-account"
+    check "macOS fallback: the app runs the switcher script" "switch-github-account" \
+      "$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist" 2>/dev/null)"
+    { [ -x "$launcher" ] && grep -q "$inst/bin/git-switch-account.sh" "$launcher" && grep -q "/opt/homebrew/bin" "$launcher"; } && r=yes || r=no
+    check "macOS fallback: the launcher finds Homebrew's gh and the installed switcher" "yes" "$r"
+    run_isolated bash "$inst/uninstall.sh"
   fi
   check "uninstall.sh removes the git settings" "" \
     "$(GIT_CONFIG_GLOBAL="$fake_home/.gitconfig" git config --global --get-regexp '^credential\.https://github\.com\.' || true)"
