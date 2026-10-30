@@ -65,15 +65,40 @@ case "$(uname -s 2>/dev/null)" in
     app="$HOME/Applications/Switch GitHub Account.app"
     rm -rf "$app"
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-    # Apps opened from Finder get a minimal PATH without Homebrew, where gh
-    # usually lives, so add the usual places first.
-    cat > "$app/Contents/MacOS/switch-github-account" <<APP
+    # The app's window (gui/mac/AccountPicker.swift) is built here with the
+    # Swift compiler from the Xcode Command Line Tools, which git on macOS
+    # already needs. Without them, or if the build fails, the app runs the
+    # switcher script with the standard macOS dialogs instead.
+    exe="switch-github-account"
+    if [ "${GIT_ACCOUNT_PICKER_NO_NATIVE:-0}" = "1" ]; then
+      echo "GIT_ACCOUNT_PICKER_NO_NATIVE=1: the app uses the standard macOS dialogs."
+    elif xcode-select -p >/dev/null 2>&1 && command -v swiftc >/dev/null 2>&1; then
+      echo "Building the macOS app window (this can take a minute)..."
+      if swiftc -O -parse-as-library "$SRC_DIR/gui/mac/AccountPicker.swift" \
+          -o "$app/Contents/MacOS/AccountPicker" >/dev/null 2>&1; then
+        exe="AccountPicker"
+      else
+        echo "  Couldn't build it; the app will use the standard macOS dialogs." >&2
+        rm -f "$app/Contents/MacOS/AccountPicker"
+      fi
+    else
+      echo "Xcode Command Line Tools not found, so the app uses the standard macOS dialogs."
+      echo "  For the full window, run 'xcode-select --install', then this installer again."
+    fi
+    if [ "$exe" = "switch-github-account" ]; then
+      # Apps opened from Finder get a minimal PATH without Homebrew, where gh
+      # usually lives, so add the usual places first.
+      cat > "$app/Contents/MacOS/switch-github-account" <<APP
 #!/bin/bash
 export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
 exec /bin/bash "$INSTALL_DIR/bin/git-switch-account.sh"
 APP
-    chmod +x "$app/Contents/MacOS/switch-github-account"
-    cat > "$app/Contents/Info.plist" <<'PLIST'
+      chmod +x "$app/Contents/MacOS/switch-github-account"
+    fi
+    # The SwiftUI window needs macOS 12; the script fallback runs on older ones.
+    minos="10.13"
+    [ "$exe" = "AccountPicker" ] && minos="12.0"
+    cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -81,11 +106,12 @@ APP
   <key>CFBundleName</key><string>Switch GitHub Account</string>
   <key>CFBundleDisplayName</key><string>Switch GitHub Account</string>
   <key>CFBundleIdentifier</key><string>io.github.sombirverma.git-account-picker</string>
-  <key>CFBundleExecutable</key><string>switch-github-account</string>
+  <key>CFBundleExecutable</key><string>$exe</string>
   <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>LSMinimumSystemVersion</key><string>$minos</string>
+  <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 PLIST

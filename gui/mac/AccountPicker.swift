@@ -520,20 +520,22 @@ struct PickerView: View {
           .resizable()
           .frame(width: 44, height: 44)
         VStack(alignment: .leading, spacing: 2) {
-          Text("GitHub accounts").font(.system(size: 17, weight: .semibold))
+          HStack {
+            Text("GitHub accounts").font(.system(size: 17, weight: .semibold))
+            Spacer()
+            Button {
+              settings.theme = ["auto": "light", "light": "dark"][settings.theme] ?? "auto"
+            } label: {
+              Label(themeLabel, systemImage: themeSymbol)
+            }
+            .controlSize(.small)
+            .help("Theme: Auto follows macOS. Click to switch between Auto, Light and Dark.")
+          }
           Text(store.opts.subtitle ?? (store.manage ? "Switch the account git uses for \(store.host)"
             : "Choose the account git uses for \(store.host)"))
             .font(.system(size: 12))
             .foregroundColor(.secondary)
         }
-        Spacer()
-        Button {
-          settings.theme = ["auto": "light", "light": "dark"][settings.theme] ?? "auto"
-        } label: {
-          Label(themeLabel, systemImage: themeSymbol)
-        }
-        .controlSize(.small)
-        .help("Theme: Auto follows macOS. Click to switch between Auto, Light and Dark.")
       }
 
       ScrollView {
@@ -631,9 +633,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if let theme = opts.renderTheme { settings.theme = theme }
     }
 
+    // Explicit window colour behind the content, so a rendered snapshot
+    // (which doesn't include the window's own background) matches.
+    let background = Color(nsColor: .windowBackgroundColor)
     let root: AnyView = opts.mode == "login"
-      ? AnyView(LoginView(store: store))
-      : AnyView(PickerView(store: store, settings: settings))
+      ? AnyView(LoginView(store: store).background(background))
+      : AnyView(PickerView(store: store, settings: settings).background(background))
     hosting = NSHostingView(rootView: root)
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
@@ -655,7 +660,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if let path = opts.render {
       store.welcome()
       fit()
-      window.orderFrontRegardless()
+      // Active window, so buttons and switches show their real colours.
+      NSApp.setActivationPolicy(.regular)
+      NSApp.activate(ignoringOtherApps: true)
+      window.makeKeyAndOrderFront(nil)
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
         self.render(to: path)
         NSApp.terminate(nil)
